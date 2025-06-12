@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>白板服务</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #whiteboard {
+            width: 100%;
+            height: 100vh;
+            border: none;
+            margin: 0;
+            padding-top: 60px; /* 初始较小的边距，收起状态 */
+            box-sizing: border-box;
+            transition: padding-top 0.3s ease;
+        }
+        .controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 15px;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        .controls.collapsed {
+            padding: 10px 15px;
+        }
+        .url-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #urlInput {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .toggle-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .toggle-btn:hover {
+            background: #0056b3;
+        }
+        button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+        }
+        button:hover {
+            background: #f8f9fa;
+        }
+        .html-section {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .html-section.expanded {
+            max-height: 300px;
+        }
+        #contentInput {
+            padding: 8px;
+            width: 100%;
+            height: 150px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .button-container {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls collapsed" id="controls">
+        <div class="url-bar">
+            <input type="text" id="urlInput" placeholder="输入网页URL">
+            <button onclick="updateContent('url')" style="margin: 0;">打开网页</button>
+            <button class="toggle-btn" onclick="toggleHtmlSection()" id="toggleBtn">输入HTML</button>
+        </div>
+        <div class="html-section" id="htmlSection">
+            <textarea id="contentInput" placeholder="输入HTML内容&#10;支持多行输入，可以包含完整的HTML页面、JavaScript代码和注释"></textarea>
+            <div class="button-container">
+                <button onclick="updateContent('html')">更新HTML</button>
+                <button onclick="clearContent()">清空</button>
+            </div>
+        </div>
+    </div>
+    <div id="whiteboard"></div>
+
+    <script>
+        let lastContent = null;
+        let eventSource = null;
+
+        // 初始化SSE连接
+        function initSSE() {
+            // 关闭已存在的连接
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            // 创建新的SSE连接
+            eventSource = new EventSource('/api/events');
+            
+            // 监听消息
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (JSON.stringify(data) !== JSON.stringify(lastContent)) {
+                    updateDisplay(data);
+                    lastContent = data;
+                }
+            };
+
+            // 监听错误
+            eventSource.onerror = function(error) {
+                console.error('SSE连接错误:', error);
+                // 尝试重新连接
+                setTimeout(initSSE, 5000);
+            };
+        }
+
+        // 更新显示内容
+        function updateDisplay(data) {
+            const whiteboard = document.getElementById('whiteboard');
+            if (data.type === 'url') {
+                whiteboard.innerHTML = `<iframe src="${data.content}" style="width:100%;height:100%;border:none;"></iframe>`;
+            } else {
+                // 检测是否为完整的HTML页面
+                const isFullHtmlPage = /<html[\s>]/i.test(data.content) || 
+                                      /<head[\s>]/i.test(data.content) || 
+                                      /<body[\s>]/i.test(data.content) ||
+                                      /<!DOCTYPE\s+html/i.test(data.content) ||
+                                      (/<script[\s>]/i.test(data.content) && /<\/script>/i.test(data.content)) ||
+                                      (/<style[\s>]/i.test(data.content) && /<\/style>/i.test(data.content));
+                
+                if (isFullHtmlPage) {
+                    // 如果是完整的HTML页面，使用iframe + blob URL
+                    const blob = new Blob([data.content], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    // 清理之前的blob URL
+                    const existingIframe = whiteboard.querySelector('iframe[data-blob-url]');
+                    if (existingIframe) {
+                        const oldUrl = existingIframe.getAttribute('data-blob-url');
+                        if (oldUrl) {
+                            URL.revokeObjectURL(oldUrl);
+                        }
+                    }
+                    
+                    whiteboard.innerHTML = `<iframe src="${url}" data-blob-url="${url}" style="width:100%;height:100%;border:none;"></iframe>`;
+                } else {
+                    // 如果只是HTML片段，直接使用innerHTML
+                    whiteboard.innerHTML = data.content;
+                }
+            }
+        }
+
+        // 更新内容
+        async function updateContent(type) {
+            let content;
+            if (type === 'url') {
+                content = document.getElementById('urlInput').value.trim();
+                
+                // 自动补充协议前缀
+                if (content && !content.match(/^https?:\/\//i)) {
+                    content = 'https://' + content;
+                    document.getElementById('urlInput').value = content; // 更新显示的URL
+                }
+            } else {
+                content = document.getElementById('contentInput').value.trim();
+            }
+            
+            if (!content) {
+                alert('请输入内容');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/content', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        type: type,
+                        content: content
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('更新成功');
+                    
+                    // 如果是URL更新成功，清空HTML编辑框
+                    if (type === 'url') {
+                        document.getElementById('contentInput').value = '';
+                    }
+                    // 如果是HTML更新成功，清空URL输入框
+                    else if (type === 'html') {
+                        document.getElementById('urlInput').value = '';
+                    }
+                } else {
+                    alert('更新失败');
+                }
+            } catch (error) {
+                console.error('更新失败:', error);
+                alert('更新失败');
+            }
+        }
+
+        // 切换HTML编辑区域显示/隐藏
+        async function toggleHtmlSection() {
+            const htmlSection = document.getElementById('htmlSection');
+            const controls = document.getElementById('controls');
+            const toggleBtn = document.getElementById('toggleBtn');
+            
+            if (htmlSection.classList.contains('expanded')) {
+                htmlSection.classList.remove('expanded');
+                controls.classList.add('collapsed');
+                toggleBtn.textContent = '输入HTML';
+                updateWhiteboardMargin();
+            } else {
+                htmlSection.classList.add('expanded');
+                controls.classList.remove('collapsed');
+                toggleBtn.textContent = '收起';
+                updateWhiteboardMargin();
+                
+                // 展开时自动加载当前内容
+                await loadCurrentHtmlContent();
+            }
+        }
+
+        // 更新白板区域的上边距
+        function updateWhiteboardMargin() {
+            setTimeout(() => {
+                const controls = document.getElementById('controls');
+                const whiteboard = document.getElementById('whiteboard');
+                const controlsHeight = controls.offsetHeight;
+                whiteboard.style.paddingTop = (controlsHeight + 10) + 'px';
+            }, 300); // 等待CSS过渡完成
+        }
+
+        // 清空内容
+        function clearContent() {
+            document.getElementById('contentInput').value = '';
+        }
+
+        // 加载当前HTML内容到编辑框
+        async function loadCurrentHtmlContent() {
+            try {
+                const response = await fetch('/api/content');
+                const data = await response.json();
+                if (data.type === 'html') {
+                    document.getElementById('contentInput').value = data.content;
+                }
+                // 如果是URL类型，HTML编辑框保持为空，因为我们无法获取外部URL的HTML源码
+            } catch (error) {
+                console.error('加载HTML内容失败:', error);
+            }
+        }
+
+        // 加载当前内容到相应的输入框
+        async function loadCurrentContent() {
+            try {
+                const response = await fetch('/api/content');
+                const data = await response.json();
+                if (data.type === 'html') {
+                    // HTML类型：URL框清空，HTML框不操作（因为可能处于收起状态）
+                    document.getElementById('urlInput').value = '';
+                } else if (data.type === 'url') {
+                    // URL类型：显示URL，HTML框清空
+                    document.getElementById('urlInput').value = data.content;
+                    document.getElementById('contentInput').value = '';
+                }
+            } catch (error) {
+                console.error('加载内容失败:', error);
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', async () => {
+            initSSE();
+            updateWhiteboardMargin(); // 初始化白板边距
+            
+            // 加载当前内容到相应的输入框
+            await loadCurrentContent();
+            
+            // 添加键盘快捷键
+            const contentInput = document.getElementById('contentInput');
+            const urlInput = document.getElementById('urlInput');
+            
+            // HTML编辑区域的快捷键
+            contentInput.addEventListener('keydown', (e) => {
+                // Ctrl+Enter 更新HTML内容
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    updateContent('html');
+                }
+                // Tab键插入4个空格
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const start = contentInput.selectionStart;
+                    const end = contentInput.selectionEnd;
+                    const value = contentInput.value;
+                    contentInput.value = value.substring(0, start) + '    ' + value.substring(end);
+                    contentInput.selectionStart = contentInput.selectionEnd = start + 4;
+                }
+            });
+            
+            // URL输入框的快捷键
+            urlInput.addEventListener('keydown', (e) => {
+                // Enter键更新URL
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    updateContent('url');
+                }
+            });
+            
+            // URL输入框失去焦点时自动补充协议（可选的额外改进）
+            urlInput.addEventListener('blur', (e) => {
+                let value = e.target.value.trim();
+                if (value && !value.match(/^https?:\/\//i)) {
+                    e.target.value = 'https://' + value;
+                }
+            });
+        });
+
+        // 页面卸载时清理
+        window.addEventListener('unload', () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            // 清理blob URL
+            const whiteboard = document.getElementById('whiteboard');
+            const iframe = whiteboard.querySelector('iframe[data-blob-url]');
+            if (iframe) {
+                const blobUrl = iframe.getAttribute('data-blob-url');
+                if (blobUrl) {
+                    URL.revokeObjectURL(blobUrl);
+                }
+            }
+        });
+    </script>
+</body>
+</html> 
