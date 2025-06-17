@@ -11,6 +11,7 @@ import uvicorn
 from pathlib import Path
 import asyncio
 from sse_starlette.sse import EventSourceResponse
+from mcp.server.fastmcp import FastMCP
 
 # 获取当前文件所在目录
 BASE_DIR = Path(__file__).resolve().parent
@@ -93,7 +94,23 @@ async def events():
 
     return EventSourceResponse(event_generator())
 
+mcp = FastMCP(name="whiteboard", version="1.0.0", description="白板服务")
+
+@mcp.tool()
+async def update_whiteboard_url(url: str):
+    """通过指定URL更新白板内容"""
+    await update_content(ContentUpdate(type="url", content=url))
+    return {"message": "whiteboard updated"}
+
+@mcp.tool()
+async def update_whiteboard_html(html: str):
+    """通过指定HTML更新白板内容"""
+    await update_content(ContentUpdate(type="html", content=html))
+    return {"message": "whiteboard updated"}
+
+
 def main():
+    app.mount("/mcp", mcp.sse_app())
     uvicorn.run(app, host="0.0.0.0", port=5000)
 
 if __name__ == '__main__':
