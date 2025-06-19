@@ -130,8 +130,16 @@
             eventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 if (JSON.stringify(data) !== JSON.stringify(lastContent)) {
-                    // 在更新 HTML 内容之前清空 URL 输入框
-                    document.getElementById('urlInput').value = '';
+                    // 根据内容类型更新URL输入框
+                    if (data.type === 'url') {
+                        // 如果是URL类型，显示当前URL
+                        document.getElementById('urlInput').value = data.content;
+                        // 清空HTML编辑框
+                        document.getElementById('contentInput').value = '';
+                    } else if (data.type === 'html') {
+                        // 如果是HTML类型，清空URL输入框
+                        document.getElementById('urlInput').value = '';
+                    }
                     updateDisplay(data);
                     lastContent = data;
                 }
@@ -193,8 +201,6 @@
                     document.getElementById('urlInput').value = content; // 更新显示的URL
                 }
             } else {
-                // 在更新 HTML 内容之前清空 URL 输入框
-                document.getElementById('urlInput').value = '';
                 content = document.getElementById('contentInput').value.trim();
             }
             
@@ -218,13 +224,8 @@
                 if (response.ok) {
                     console.log('更新成功');
                     
-                    // 如果是URL更新成功，清空HTML编辑框
-                    if (type === 'url') {
-                        document.getElementById('contentInput').value = '';
-                    }
-                    // 如果是HTML更新成功，清空URL输入框并收起HTML编辑区域
-                    else if (type === 'html') {
-                        document.getElementById('urlInput').value = '';
+                    // 如果是HTML更新成功，收起HTML编辑区域
+                    if (type === 'html') {
                         // 如果HTML编辑区域是展开状态，则收起它
                         const htmlSection = document.getElementById('htmlSection');
                         if (htmlSection.classList.contains('expanded')) {
