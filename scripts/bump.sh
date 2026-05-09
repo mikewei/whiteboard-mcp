@@ -15,7 +15,11 @@ fi
 
 scripts/cliff.sh > CHANGELOG.md
 git add CHANGELOG.md
-git commit -m "chore: update changelog"
+if git diff --cached --quiet; then
+    echo "No changelog changes to commit, skipping."
+else
+    git commit -m "chore: update changelog"
+fi
 
 
 # bump version
