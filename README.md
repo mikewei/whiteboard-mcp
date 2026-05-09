@@ -10,7 +10,18 @@ cd whiteboard-mcp
 uv run whiteboard_mcp
 ```
 
-## MCP configure
+The server listens on `0.0.0.0:5000` by default.
+
+## MCP endpoints
+
+| Transport       | URL (local)                                      |
+|-----------------|--------------------------------------------------|
+| StreamableHTTP  | `http://127.0.0.1:5000/mcp` (POST `/mcp`)       |
+| SSE (+ messages)| `http://127.0.0.1:5000/sse` (+ `POST /sse/messages/`) |
+
+Use your machine's LAN IP instead of `127.0.0.1` when connecting from another device on the same network.
+
+## MCP configure (SSE via mcp-remote)
 
 ```
 {
@@ -19,7 +30,7 @@ uv run whiteboard_mcp
             "command": "npx",
             "args": [
                 "mcp-remote",
-                "http://127.0.0.1:5000/mcp/sse",
+                "http://127.0.0.1:5000/sse",
                 "--allow-http"
             ]
         }
@@ -27,3 +38,4 @@ uv run whiteboard_mcp
 }
 ```
 
+Clients that support **Streamable HTTP** natively should point their MCP server URL at `http://127.0.0.1:5000/mcp` (adjust host/port for LAN as needed).
