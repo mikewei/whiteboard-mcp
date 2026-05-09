@@ -1,10 +1,11 @@
 import argparse
 import importlib.metadata
+import os
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import json
@@ -15,6 +16,8 @@ from pathlib import Path
 import asyncio
 from sse_starlette.sse import EventSourceResponse
 from mcp.server.fastmcp import FastMCP
+
+from . import history_store
 
 # 获取当前文件所在目录
 BASE_DIR = Path(__file__).resolve().parent
@@ -60,6 +63,7 @@ async def apply_content_update(content: ContentUpdate):
         "updated_at": datetime.now().isoformat(),
     }
     save_content(content_data)
+    history_store.upsert_record(content_type=content.type, content=content.content)
     await notify_clients(content_data)
     return {"message": "内容已更新"}
 
@@ -117,6 +121,44 @@ async def get_content():
 @app.post("/api/content")
 async def update_content(content: ContentUpdate):
     return await apply_content_update(content)
+
+
+@app.get("/api/history")
+async def api_history_list():
+    rows = history_store.list_records_newest_first()
+    out = []
+    for r in rows:
+        item = {
+            "id": r["id"],
+            "type": r["type"],
+            "updated_at": r.get("updated_at"),
+            "preview": r.get("preview"),
+        }
+        if r.get("type") == "url":
+            item["url"] = r.get("url")
+        out.append(item)
+    return out
+
+
+@app.post("/api/history/{record_id}/restore")
+async def api_history_restore(record_id: str):
+    payload = history_store.resolve_restore_payload(record_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="记录不存在或文件缺失")
+    ctype, body = payload
+    if ctype == "html":
+        return await apply_content_update(ContentUpdate(type="html", content=body))
+    if ctype == "url":
+        return await apply_content_update(ContentUpdate(type="url", content=body))
+    raise HTTPException(status_code=500, detail="无效的记录类型")
+
+
+@app.get("/api/history/{record_id}/html")
+async def api_history_raw_html(record_id: str):
+    path = history_store.html_file_path(record_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="不是 HTML 记录或文件不存在")
+    return FileResponse(path, media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/events")
@@ -199,7 +241,17 @@ def main():
         default=5000,
         help="Bind port (default: 5000)",
     )
+    parser.add_argument(
+        "--store-dir",
+        default=None,
+        metavar="PATH",
+        help="History store directory (default: ~/.whiteboard-mcp/store). "
+        "Also set WHITEBOARD_STORE_DIR.",
+    )
     args = parser.parse_args()
+
+    if args.store_dir:
+        os.environ["WHITEBOARD_STORE_DIR"] = str(Path(args.store_dir).expanduser().resolve())
 
     app.mount("/sse", mcp.sse_app(mount_path="/sse"))
     app.mount("/mcp", streamable_http_asgi)

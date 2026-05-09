@@ -35,9 +35,15 @@
         }
         .url-bar {
             display: flex;
+            flex-wrap: nowrap;
             gap: 10px;
             align-items: center;
             margin-bottom: 10px;
+        }
+        /* 顶栏只用 flex gap 控制间距，避免与全局 button { margin-right } 叠加 */
+        .url-bar > button,
+        .url-bar .overflow-menu-btn {
+            margin: 0;
         }
         #urlInput {
             flex: 1;
@@ -93,14 +99,223 @@
             display: flex;
             gap: 10px;
         }
+        .overflow-menu {
+            position: relative;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+        /* 与「打开网页」同款：padding 8px 16px + border 1px + 圆角 4px */
+        .overflow-menu-btn {
+            box-sizing: border-box;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1.25;
+            color: #333;
+        }
+        .overflow-menu-btn:hover {
+            background: #f8f9fa;
+        }
+        .overflow-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 4px);
+            min-width: 160px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            z-index: 1001;
+            padding: 4px 0;
+        }
+        .overflow-menu.open .overflow-dropdown {
+            display: block;
+        }
+        .overflow-dropdown button {
+            display: block;
+            width: 100%;
+            margin: 0;
+            padding: 10px 14px;
+            text-align: left;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .overflow-dropdown button:hover:not(:disabled) {
+            background: #f0f4f8;
+        }
+        .overflow-dropdown button:disabled {
+            color: #999;
+            cursor: not-allowed;
+        }
+        /* 低于 .controls(1000)，高于白板；用于接收白板/iframe 上的点击以关闭菜单（iframe 内点击不会冒泡到父文档） */
+        .menu-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: transparent;
+        }
+        .menu-backdrop.is-open {
+            display: block;
+        }
+        .history-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1100;
+            background: rgba(0, 0, 0, 0.35);
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .history-overlay.is-open {
+            display: flex;
+        }
+        .history-panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            max-width: 580px;
+            max-height: min(70vh, 560px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .history-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            border-bottom: 1px solid #e8e8e8;
+            flex-shrink: 0;
+        }
+        .history-panel-header h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .history-panel-close {
+            margin: 0;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .history-panel-close:hover {
+            background: #f8f9fa;
+        }
+        .history-panel-body {
+            overflow-y: auto;
+            padding: 0;
+            flex: 1;
+            min-height: 120px;
+        }
+        .history-empty {
+            padding: 24px 16px;
+            color: #666;
+            text-align: center;
+            font-size: 14px;
+        }
+        .history-row {
+            width: 100%;
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: stretch;
+            gap: 12px;
+            box-sizing: border-box;
+        }
+        .history-row:last-child {
+            border-bottom: none;
+        }
+        .history-row:hover {
+            background: #f0f4f8;
+        }
+        .history-row:focus {
+            outline: 2px solid #007bff;
+            outline-offset: -2px;
+        }
+        .history-thumb-wrap {
+            flex: 0 0 148px;
+            width: 148px;
+            height: 92px;
+            overflow: hidden;
+            border-radius: 6px;
+            background: #e8ecf0;
+            position: relative;
+        }
+        .history-thumb-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: top center;
+            display: block;
+            pointer-events: none;
+        }
+        .history-thumb-img.is-loading {
+            opacity: 0.35;
+        }
+        .history-row-main {
+            flex: 1;
+            min-width: 0;
+        }
+        .history-row-meta {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+        .history-row-preview {
+            font-size: 14px;
+            color: #222;
+            word-break: break-all;
+        }
+        @media print {
+            .menu-backdrop {
+                display: none !important;
+            }
+            .history-overlay {
+                display: none !important;
+            }
+            .controls {
+                display: none !important;
+            }
+            #whiteboard {
+                padding-top: 0 !important;
+                height: auto !important;
+                min-height: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="controls collapsed" id="controls">
         <div class="url-bar">
             <input type="text" id="urlInput" placeholder="输入网页URL">
-            <button onclick="updateContent('url')" style="margin: 0;">打开网页</button>
+            <button onclick="updateContent('url')">打开网页</button>
             <button class="toggle-btn" onclick="toggleHtmlSection()" id="toggleBtn">输入HTML</button>
+            <div class="overflow-menu" id="overflowMenu">
+                <button type="button" class="overflow-menu-btn" id="overflowMenuBtn" onclick="toggleOverflowMenu(event)" aria-expanded="false" aria-haspopup="true" title="更多">&#8943;</button>
+                <div class="overflow-dropdown" id="overflowDropdown" role="menu">
+                    <button type="button" id="historyPanelBtn" role="menuitem" onclick="openHistoryPanel(event)">历史页面</button>
+                    <button type="button" id="downloadPdfBtn" role="menuitem" onclick="downloadAsPdf(event)">下载为 PDF</button>
+                </div>
+            </div>
         </div>
         <div class="html-section" id="htmlSection">
             <textarea id="contentInput" placeholder="输入HTML内容&#10;支持多行输入，可以包含完整的HTML页面、JavaScript代码和注释"></textarea>
@@ -111,7 +326,21 @@
         </div>
     </div>
     <div id="whiteboard"></div>
+    <div id="menuBackdrop" class="menu-backdrop" aria-hidden="true"></div>
 
+    <div id="historyOverlay" class="history-overlay" aria-hidden="true" onclick="closeHistoryPanelOnBackdrop(event)">
+        <div class="history-panel" role="dialog" aria-labelledby="historyPanelTitle" onclick="event.stopPropagation()">
+            <div class="history-panel-header">
+                <h2 id="historyPanelTitle">历史页面</h2>
+                <button type="button" class="history-panel-close" onclick="closeHistoryPanel()" aria-label="关闭">关闭</button>
+            </div>
+            <div class="history-panel-body" id="historyPanelBody">
+                <div class="history-empty" id="historyEmpty">加载中…</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
     <script>
         let lastContent = null;
         let eventSource = null;
@@ -140,8 +369,9 @@
                         // 如果是HTML类型，清空URL输入框
                         document.getElementById('urlInput').value = '';
                     }
-                    updateDisplay(data);
                     lastContent = data;
+                    updateDisplay(data);
+                    updatePdfMenuState();
                 }
             };
 
@@ -151,6 +381,341 @@
                 // 尝试重新连接
                 setTimeout(initSSE, 5000);
             };
+        }
+
+        function updatePdfMenuState() {
+            const pdfBtn = document.getElementById('downloadPdfBtn');
+            const ok = lastContent && lastContent.type === 'html';
+            if (pdfBtn) {
+                pdfBtn.disabled = !ok;
+                pdfBtn.title = ok ? '' : '仅在使用 HTML 内容时可导出';
+            }
+        }
+
+        function setOverflowOpen(open) {
+            const wrap = document.getElementById('overflowMenu');
+            const btn = document.getElementById('overflowMenuBtn');
+            const backdrop = document.getElementById('menuBackdrop');
+            if (!wrap || !btn) return;
+            wrap.classList.toggle('open', open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (backdrop) {
+                backdrop.classList.toggle('is-open', open);
+                backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+            }
+        }
+
+        function toggleOverflowMenu(ev) {
+            ev.stopPropagation();
+            const wrap = document.getElementById('overflowMenu');
+            if (!wrap) return;
+            setOverflowOpen(!wrap.classList.contains('open'));
+        }
+
+        (function () {
+            const backdrop = document.getElementById('menuBackdrop');
+            if (backdrop) {
+                backdrop.addEventListener('click', function () {
+                    setOverflowOpen(false);
+                });
+            }
+        })();
+
+        function isHistoryPanelOpen() {
+            const el = document.getElementById('historyOverlay');
+            return el && el.classList.contains('is-open');
+        }
+
+        function openHistoryPanel(ev) {
+            if (ev) ev.stopPropagation();
+            setOverflowOpen(false);
+            const el = document.getElementById('historyOverlay');
+            const body = document.getElementById('historyPanelBody');
+            if (!el || !body) return;
+            teardownHistoryThumbs();
+            el.classList.add('is-open');
+            el.setAttribute('aria-hidden', 'false');
+            body.innerHTML = '<div class="history-empty" id="historyEmpty">加载中…</div>';
+            loadHistory();
+        }
+
+        const historyHtmlThumbCache = Object.create(null);
+        let htmlThumbGenChain = Promise.resolve();
+        let historyThumbObserver = null;
+
+        function teardownHistoryThumbs() {
+            if (historyThumbObserver) {
+                historyThumbObserver.disconnect();
+                historyThumbObserver = null;
+            }
+            document.querySelectorAll('iframe.history-thumb-capture').forEach(function (el) {
+                el.remove();
+            });
+        }
+
+        function queueHtmlThumbnail(recordId, imgEl) {
+            if (historyHtmlThumbCache[recordId]) {
+                imgEl.src = historyHtmlThumbCache[recordId];
+                imgEl.classList.remove('is-loading');
+                return;
+            }
+            htmlThumbGenChain = htmlThumbGenChain.then(function () {
+                return generateHtmlThumbnail(recordId, imgEl);
+            });
+        }
+
+        function generateHtmlThumbnail(recordId, imgEl) {
+            if (historyHtmlThumbCache[recordId]) {
+                imgEl.src = historyHtmlThumbCache[recordId];
+                imgEl.classList.remove('is-loading');
+                return Promise.resolve();
+            }
+            if (imgEl.dataset.thumbState === 'pending' || imgEl.dataset.thumbState === 'done') {
+                return Promise.resolve();
+            }
+            imgEl.dataset.thumbState = 'pending';
+            imgEl.classList.add('is-loading');
+
+            const iframe = document.createElement('iframe');
+            iframe.className = 'history-thumb-capture';
+            iframe.style.cssText =
+                'position:fixed;left:-9999px;top:0;width:960px;height:720px;border:none;opacity:0;pointer-events:none;';
+            iframe.src = '/api/history/' + encodeURIComponent(recordId) + '/html';
+            document.body.appendChild(iframe);
+
+            const loadDone = new Promise(function (resolve, reject) {
+                const t = setTimeout(function () {
+                    reject(new Error('timeout'));
+                }, 45000);
+                iframe.onload = function () {
+                    clearTimeout(t);
+                    resolve();
+                };
+                iframe.onerror = function () {
+                    clearTimeout(t);
+                    reject(new Error('load'));
+                };
+            });
+
+            return loadDone
+                .then(function () {
+                    if (typeof html2canvas !== 'function') {
+                        throw new Error('html2canvas unavailable');
+                    }
+                    const doc = iframe.contentDocument;
+                    if (!doc) {
+                        throw new Error('no document');
+                    }
+                    const captureRoot = doc.body || doc.documentElement;
+                    return html2canvas(captureRoot, {
+                        scale: 0.2,
+                        useCORS: true,
+                        allowTaint: true,
+                        logging: false,
+                    });
+                })
+                .then(function (canvas) {
+                    const tw = 148;
+                    const th = 92;
+                    const out = document.createElement('canvas');
+                    out.width = tw;
+                    out.height = th;
+                    const ctx = out.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, tw, th);
+                    ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, tw, th);
+                    const dataUrl = out.toDataURL('image/jpeg', 0.74);
+                    historyHtmlThumbCache[recordId] = dataUrl;
+                    imgEl.src = dataUrl;
+                    imgEl.dataset.thumbState = 'done';
+                })
+                .catch(function (e) {
+                    console.error('history thumb:', e);
+                    imgEl.dataset.thumbState = 'fail';
+                })
+                .finally(function () {
+                    imgEl.classList.remove('is-loading');
+                    if (iframe.parentNode) {
+                        iframe.remove();
+                    }
+                });
+        }
+
+        function setupHistoryThumbObserver() {
+            teardownHistoryThumbs();
+            const body = document.getElementById('historyPanelBody');
+            if (!body) return;
+
+            historyThumbObserver = new IntersectionObserver(
+                function (entries) {
+                    entries.forEach(function (entry) {
+                        const wrap = entry.target;
+                        const typ = wrap.dataset.historyType;
+                        const id = wrap.dataset.historyId;
+                        const img = wrap.querySelector('.history-thumb-img');
+                        if (!entry.isIntersecting || typ !== 'html' || !id || !img) {
+                            return;
+                        }
+                        if (wrap.dataset.thumbRequested === '1') {
+                            return;
+                        }
+                        wrap.dataset.thumbRequested = '1';
+                        queueHtmlThumbnail(id, img);
+                    });
+                },
+                {
+                    root: body,
+                    rootMargin: '100px 0px',
+                    threshold: 0.01,
+                }
+            );
+
+            body.querySelectorAll('.history-thumb-wrap[data-history-type="html"]').forEach(function (w) {
+                historyThumbObserver.observe(w);
+            });
+        }
+
+        function closeHistoryPanel() {
+            teardownHistoryThumbs();
+            const el = document.getElementById('historyOverlay');
+            if (!el) return;
+            el.classList.remove('is-open');
+            el.setAttribute('aria-hidden', 'true');
+        }
+
+        function closeHistoryPanelOnBackdrop(ev) {
+            if (ev.target === document.getElementById('historyOverlay')) {
+                closeHistoryPanel();
+            }
+        }
+
+        async function loadHistory() {
+            const body = document.getElementById('historyPanelBody');
+            if (!body) return;
+            teardownHistoryThumbs();
+            try {
+                const response = await fetch('/api/history');
+                if (!response.ok) throw new Error('加载失败');
+                const rows = await response.json();
+                if (!rows.length) {
+                    body.innerHTML = '<div class="history-empty">暂无历史记录</div>';
+                    return;
+                }
+                body.innerHTML = '';
+                rows.forEach(function (row) {
+                    const rowEl = document.createElement('div');
+                    rowEl.className = 'history-row';
+                    rowEl.setAttribute('role', 'button');
+                    rowEl.tabIndex = 0;
+                    rowEl.addEventListener('click', function () {
+                        restoreHistoryEntry(row.id);
+                    });
+                    rowEl.addEventListener('keydown', function (e) {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            restoreHistoryEntry(row.id);
+                        }
+                    });
+
+                    const thumbWrap = document.createElement('div');
+                    thumbWrap.className = 'history-thumb-wrap';
+                    thumbWrap.dataset.historyType = row.type;
+                    thumbWrap.dataset.historyId = row.id;
+
+                    const img = document.createElement('img');
+                    img.className = 'history-thumb-img';
+                    img.alt = '';
+                    if (row.type === 'html') {
+                        img.classList.add('is-loading');
+                    }
+
+                    if (row.type === 'url' && row.url) {
+                        try {
+                            const u = new URL(row.url);
+                            img.src =
+                                'https://www.google.com/s2/favicons?domain=' +
+                                encodeURIComponent(u.hostname) +
+                                '&sz=128';
+                            img.onerror = function () {
+                                img.style.opacity = '0.35';
+                            };
+                        } catch (e1) {
+                            img.style.visibility = 'hidden';
+                        }
+                    }
+
+                    thumbWrap.appendChild(img);
+
+                    const main = document.createElement('div');
+                    main.className = 'history-row-main';
+                    const ts = row.updated_at || row.created_at;
+                    const dt = ts ? new Date(ts).toLocaleString() : '';
+                    const typeLabel = row.type === 'url' ? '网页' : 'HTML';
+                    main.innerHTML =
+                        '<div class="history-row-meta">' +
+                        escapeHtml(typeLabel) +
+                        ' · ' +
+                        escapeHtml(dt) +
+                        '</div>' +
+                        '<div class="history-row-preview">' +
+                        escapeHtml(row.preview || '') +
+                        '</div>';
+
+                    rowEl.appendChild(thumbWrap);
+                    rowEl.appendChild(main);
+                    body.appendChild(rowEl);
+                });
+                setupHistoryThumbObserver();
+            } catch (e) {
+                console.error(e);
+                body.innerHTML = '<div class="history-empty">加载失败</div>';
+            }
+        }
+
+        function escapeHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        async function restoreHistoryEntry(id) {
+            try {
+                const response = await fetch('/api/history/' + encodeURIComponent(id) + '/restore', {
+                    method: 'POST',
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(function () { return {}; });
+                    alert(err.detail || '恢复失败');
+                    return;
+                }
+                closeHistoryPanel();
+            } catch (e) {
+                console.error(e);
+                alert('恢复失败');
+            }
+        }
+
+        function downloadAsPdf(ev) {
+            ev.stopPropagation();
+            setOverflowOpen(false);
+            if (!lastContent || lastContent.type !== 'html') {
+                return;
+            }
+            const whiteboard = document.getElementById('whiteboard');
+            const blobIframe = whiteboard.querySelector('iframe[data-blob-url]');
+            if (blobIframe) {
+                try {
+                    const cw = blobIframe.contentWindow;
+                    if (cw) {
+                        cw.focus();
+                        cw.print();
+                        return;
+                    }
+                } catch (err) {
+                    console.error('iframe 打印失败:', err);
+                }
+            }
+            window.print();
         }
 
         // 更新显示内容
@@ -305,6 +870,8 @@
                     document.getElementById('urlInput').value = data.content;
                     document.getElementById('contentInput').value = '';
                 }
+                lastContent = data;
+                updatePdfMenuState();
             } catch (error) {
                 console.error('加载内容失败:', error);
             }
@@ -354,6 +921,13 @@
                 let value = e.target.value.trim();
                 if (value && !value.match(/^https?:\/\//i)) {
                     e.target.value = 'https://' + value;
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && isHistoryPanelOpen()) {
+                    e.preventDefault();
+                    closeHistoryPanel();
                 }
             });
         });
