@@ -1,3 +1,6 @@
+import argparse
+import importlib.metadata
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -141,7 +144,63 @@ async def events():
     return EventSourceResponse(event_generator())
 
 
+def _version_from_pyproject(path: Path) -> str | None:
+    """Read `version` from the `[project]` table in pyproject.toml."""
+    if not path.is_file():
+        return None
+    text = path.read_text(encoding="utf-8")
+    in_project = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "[project]":
+            in_project = True
+            continue
+        if in_project and stripped.startswith("[") and stripped.endswith("]"):
+            break
+        if in_project:
+            match = re.match(r'version\s*=\s*"([^"]*)"', stripped)
+            if match:
+                return match.group(1)
+    return None
+
+
+def package_version() -> str:
+    """Version from pyproject (installed wheel metadata first, then source tree)."""
+    try:
+        return importlib.metadata.version("whiteboard-mcp")
+    except importlib.metadata.PackageNotFoundError:
+        pass
+    pyproject = BASE_DIR.parent.parent / "pyproject.toml"
+    v = _version_from_pyproject(pyproject)
+    if v is not None:
+        return v
+    return "unknown"
+
+
 def main():
+    parser = argparse.ArgumentParser(
+        prog="whiteboard-mcp",
+        description="Web whiteboard API and MCP server",
+    )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"%(prog)s {package_version()}",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Bind host (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5000,
+        help="Bind port (default: 5000)",
+    )
+    args = parser.parse_args()
+
     app.mount("/sse", mcp.sse_app(mount_path="/sse"))
     app.mount("/mcp", streamable_http_asgi)
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    uvicorn.run(app, host=args.host, port=args.port)
