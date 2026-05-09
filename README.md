@@ -2,7 +2,18 @@
 
 whiteboard-mcp is a simple whiteboard web application, providing a convenient way for displaying Chatbot/LLM's output.
 
-## Install from source
+## Install
+
+### From PYPI
+
+```
+pip install whiteboard-mcp
+# or:
+# uv tool install whiteboard-mcp
+whiteboard-mcp
+```
+
+### From source
 
 ```
 git clone .../whiteboard-mcp
@@ -21,7 +32,15 @@ The server listens on `0.0.0.0:5000` by default.
 
 Use your machine's LAN IP instead of `127.0.0.1` when connecting from another device on the same network.
 
-## MCP configure (SSE via mcp-remote)
+## MCP configure
+
+### Standard /mcp API
+
+Clients that support **Streamable HTTP** natively should point their MCP server URL at `http://127.0.0.1:5000/mcp` (adjust host/port for LAN as needed).
+
+### Compatible /sse API
+
+For example you can use mcp-remote to connect /sse API:
 
 ```
 {
@@ -37,5 +56,3 @@ Use your machine's LAN IP instead of `127.0.0.1` when connecting from another de
     }
 }
 ```
-
-Clients that support **Streamable HTTP** natively should point their MCP server URL at `http://127.0.0.1:5000/mcp` (adjust host/port for LAN as needed).

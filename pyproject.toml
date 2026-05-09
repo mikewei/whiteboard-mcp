@@ -30,3 +30,17 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/whiteboard_mcp"]
+
+[tool.bumpversion]
+commit = true
+tag = true
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "## [unreleased]"
+replace = "## [{new_version}]"
