@@ -32,8 +32,8 @@ allow-direct-references = true
 packages = ["src/whiteboard_mcp"]
 
 [tool.bumpversion]
-commit = true
-tag = true
+commit = false
+tag = false
 
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
