@@ -19,7 +19,7 @@ git commit -m "chore: update changelog"
 
 
 # bump version
-bump-my-version bump "$part" --dry-run
+bump-my-version bump "$part" --dry-run --verbose
 
 read -p "Confirm bump? (y/n) " confirm
 if [ "$confirm" != "y" ]; then
@@ -33,14 +33,7 @@ bump-my-version bump "$part"
 uv lock
 
 # read new version from pyproject.toml
-version="$(python - <<'PY'
-import tomllib
-with open("pyproject.toml", "rb") as f:
-    data = tomllib.load(f)
-print(data["project"]["version"])
-PY
-)"
-
+version=$(grep '^version = ' pyproject.toml | head -1 | sed -E 's/version = "(.*)"/\1/')
 tag="v${version}"
 
 # commit
