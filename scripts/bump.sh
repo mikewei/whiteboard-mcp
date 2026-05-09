@@ -14,7 +14,8 @@ if [ "$confirm" != "y" ]; then
 fi
 
 scripts/cliff.sh > CHANGELOG.md
-git commit -am "chore: update changelog" CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "chore: update changelog"
 
 
 # bump version
