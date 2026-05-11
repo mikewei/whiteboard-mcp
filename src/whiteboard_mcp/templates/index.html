@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="{{ lang }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>白板服务</title>
+    <title>{{ ui_strings.title }}</title>
     <style>
         body {
             margin: 0;
@@ -40,7 +40,6 @@
             align-items: center;
             margin-bottom: 10px;
         }
-        /* 顶栏只用 flex gap 控制间距，避免与全局 button { margin-right } 叠加 */
         .url-bar > button,
         .url-bar .overflow-menu-btn {
             margin: 0;
@@ -104,7 +103,6 @@
             margin-left: auto;
             flex-shrink: 0;
         }
-        /* 与「打开网页」同款：padding 8px 16px + border 1px + 圆角 4px */
         .overflow-menu-btn {
             box-sizing: border-box;
             display: inline-flex;
@@ -157,7 +155,6 @@
             color: #999;
             cursor: not-allowed;
         }
-        /* 低于 .controls(1000)，高于白板；用于接收白板/iframe 上的点击以关闭菜单（iframe 内点击不会冒泡到父文档） */
         .menu-backdrop {
             display: none;
             position: fixed;
@@ -192,6 +189,41 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+        .settings-panel-wrap {
+            max-width: 420px;
+        }
+        .settings-panel-body {
+            padding: 16px 18px 18px;
+            flex-shrink: 0;
+        }
+        .settings-lang-fieldset {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px 14px;
+            margin: 0;
+        }
+        .settings-lang-fieldset legend {
+            padding: 0 6px;
+            font-size: 13px;
+            color: #555;
+        }
+        .settings-lang-options label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .settings-actions {
+            margin-top: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .settings-actions button {
+            margin: 0;
         }
         .history-panel-header {
             display: flex;
@@ -306,67 +338,89 @@
 <body>
     <div class="controls collapsed" id="controls">
         <div class="url-bar">
-            <input type="text" id="urlInput" placeholder="输入网页URL">
-            <button onclick="updateContent('url')">打开网页</button>
-            <button class="toggle-btn" onclick="toggleHtmlSection()" id="toggleBtn">输入HTML</button>
+            <input type="text" id="urlInput" placeholder="{{ ui_strings.urlPlaceholder }}">
+            <button onclick="updateContent('url')">{{ ui_strings.openWeb }}</button>
+            <button class="toggle-btn" onclick="toggleHtmlSection()" id="toggleBtn">{{ ui_strings.enterHtml }}</button>
             <div class="overflow-menu" id="overflowMenu">
-                <button type="button" class="overflow-menu-btn" id="overflowMenuBtn" onclick="toggleOverflowMenu(event)" aria-expanded="false" aria-haspopup="true" title="更多">&#8943;</button>
+                <button type="button" class="overflow-menu-btn" id="overflowMenuBtn" onclick="toggleOverflowMenu(event)" aria-expanded="false" aria-haspopup="true" title="{{ ui_strings.moreMenu }}">&#8943;</button>
                 <div class="overflow-dropdown" id="overflowDropdown" role="menu">
-                    <button type="button" id="historyPanelBtn" role="menuitem" onclick="openHistoryPanel(event)">历史页面</button>
-                    <button type="button" id="downloadPdfBtn" role="menuitem" onclick="downloadAsPdf(event)">下载为 PDF</button>
+                    <button type="button" id="historyPanelBtn" role="menuitem" onclick="openHistoryPanel(event)">{{ ui_strings.history }}</button>
+                    <button type="button" id="downloadPdfBtn" role="menuitem" onclick="downloadAsPdf(event)">{{ ui_strings.downloadPdf }}</button>
+                    <button type="button" id="settingsPanelBtn" role="menuitem" onclick="openSettingsPanel(event)">{{ ui_strings.settings }}</button>
                 </div>
             </div>
         </div>
         <div class="html-section" id="htmlSection">
-            <textarea id="contentInput" placeholder="输入HTML内容&#10;支持多行输入，可以包含完整的HTML页面、JavaScript代码和注释"></textarea>
+            <textarea id="contentInput" placeholder="{{ ui_strings.htmlPlaceholder }}"></textarea>
             <div class="button-container">
-                <button onclick="updateContent('html')">更新HTML</button>
-                <button onclick="clearContent()">清空</button>
+                <button onclick="updateContent('html')">{{ ui_strings.updateHtml }}</button>
+                <button onclick="clearContent()">{{ ui_strings.clear }}</button>
             </div>
         </div>
     </div>
     <div id="whiteboard"></div>
     <div id="menuBackdrop" class="menu-backdrop" aria-hidden="true"></div>
 
+    <div id="settingsOverlay" class="history-overlay" aria-hidden="true" onclick="closeSettingsPanelOnBackdrop(event)">
+        <div class="history-panel settings-panel-wrap" role="dialog" aria-modal="true" aria-labelledby="settingsPanelTitle" onclick="event.stopPropagation()">
+            <div class="history-panel-header">
+                <h2 id="settingsPanelTitle">{{ ui_strings.settingsTitle }}</h2>
+                <button type="button" class="history-panel-close" onclick="closeSettingsPanel()" aria-label="{{ ui_strings.closeAria }}">{{ ui_strings.close }}</button>
+            </div>
+            <div class="settings-panel-body">
+                <fieldset class="settings-lang-fieldset">
+                    <legend>{{ ui_strings.languageLabel }}</legend>
+                    <div class="settings-lang-options">
+                        <label>
+                            <input type="radio" name="uiLang" value="en" {% if lang == 'en' %}checked{% endif %}>
+                            {{ ui_strings.langEnglish }}
+                        </label>
+                        <label>
+                            <input type="radio" name="uiLang" value="zh" {% if lang == 'zh' %}checked{% endif %}>
+                            {{ ui_strings.langChinese }}
+                        </label>
+                    </div>
+                </fieldset>
+                <div class="settings-actions">
+                    <button type="button" onclick="applyUiLanguage()">{{ ui_strings.applyLanguage }}</button>
+                    <button type="button" onclick="closeSettingsPanel()">{{ ui_strings.cancel }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="historyOverlay" class="history-overlay" aria-hidden="true" onclick="closeHistoryPanelOnBackdrop(event)">
         <div class="history-panel" role="dialog" aria-labelledby="historyPanelTitle" onclick="event.stopPropagation()">
             <div class="history-panel-header">
-                <h2 id="historyPanelTitle">历史页面</h2>
-                <button type="button" class="history-panel-close" onclick="closeHistoryPanel()" aria-label="关闭">关闭</button>
+                <h2 id="historyPanelTitle">{{ ui_strings.historyTitle }}</h2>
+                <button type="button" class="history-panel-close" onclick="closeHistoryPanel()" aria-label="{{ ui_strings.closeAria }}">{{ ui_strings.close }}</button>
             </div>
             <div class="history-panel-body" id="historyPanelBody">
-                <div class="history-empty" id="historyEmpty">加载中…</div>
+                <div class="history-empty" id="historyEmpty">{{ ui_strings.loading }}</div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
     <script>
+        const UI = {{ ui_strings | tojson }};
         let lastContent = null;
         let eventSource = null;
 
-        // 初始化SSE连接
         function initSSE() {
-            // 关闭已存在的连接
             if (eventSource) {
                 eventSource.close();
             }
 
-            // 创建新的SSE连接
             eventSource = new EventSource('/api/events');
-            
-            // 监听消息
+
             eventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 if (JSON.stringify(data) !== JSON.stringify(lastContent)) {
-                    // 根据内容类型更新URL输入框
                     if (data.type === 'url') {
-                        // 如果是URL类型，显示当前URL
                         document.getElementById('urlInput').value = data.content;
-                        // 清空HTML编辑框
                         document.getElementById('contentInput').value = '';
                     } else if (data.type === 'html') {
-                        // 如果是HTML类型，清空URL输入框
                         document.getElementById('urlInput').value = '';
                     }
                     lastContent = data;
@@ -375,10 +429,8 @@
                 }
             };
 
-            // 监听错误
             eventSource.onerror = function(error) {
-                console.error('SSE连接错误:', error);
-                // 尝试重新连接
+                console.error('SSE error:', error);
                 setTimeout(initSSE, 5000);
             };
         }
@@ -388,7 +440,7 @@
             const ok = lastContent && lastContent.type === 'html';
             if (pdfBtn) {
                 pdfBtn.disabled = !ok;
-                pdfBtn.title = ok ? '' : '仅在使用 HTML 内容时可导出';
+                pdfBtn.title = ok ? '' : UI.pdfOnlyHtml;
             }
         }
 
@@ -426,6 +478,53 @@
             return el && el.classList.contains('is-open');
         }
 
+        function isSettingsPanelOpen() {
+            const el = document.getElementById('settingsOverlay');
+            return el && el.classList.contains('is-open');
+        }
+
+        function openSettingsPanel(ev) {
+            if (ev) ev.stopPropagation();
+            setOverflowOpen(false);
+            const el = document.getElementById('settingsOverlay');
+            if (!el) return;
+            el.classList.add('is-open');
+            el.setAttribute('aria-hidden', 'false');
+        }
+
+        function closeSettingsPanel() {
+            const el = document.getElementById('settingsOverlay');
+            if (!el) return;
+            el.classList.remove('is-open');
+            el.setAttribute('aria-hidden', 'true');
+        }
+
+        function closeSettingsPanelOnBackdrop(ev) {
+            if (ev.target === document.getElementById('settingsOverlay')) {
+                closeSettingsPanel();
+            }
+        }
+
+        async function applyUiLanguage() {
+            const picked = document.querySelector('input[name="uiLang"]:checked');
+            if (!picked) return;
+            const language = picked.value;
+            try {
+                const response = await fetch('/api/ui-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language: language }),
+                });
+                if (!response.ok) {
+                    throw new Error('bad status');
+                }
+                location.reload();
+            } catch (e) {
+                console.error(e);
+                alert(UI.updateFailed);
+            }
+        }
+
         function openHistoryPanel(ev) {
             if (ev) ev.stopPropagation();
             setOverflowOpen(false);
@@ -435,7 +534,10 @@
             teardownHistoryThumbs();
             el.classList.add('is-open');
             el.setAttribute('aria-hidden', 'false');
-            body.innerHTML = '<div class="history-empty" id="historyEmpty">加载中…</div>';
+            body.innerHTML =
+                '<div class="history-empty" id="historyEmpty">' +
+                escapeHtml(UI.loading) +
+                '</div>';
             loadHistory();
         }
 
@@ -595,13 +697,15 @@
             teardownHistoryThumbs();
             try {
                 const response = await fetch('/api/history');
-                if (!response.ok) throw new Error('加载失败');
+                if (!response.ok) throw new Error(UI.historyLoadError);
                 const rows = await response.json();
                 if (!rows.length) {
-                    body.innerHTML = '<div class="history-empty">暂无历史记录</div>';
+                    body.innerHTML =
+                        '<div class="history-empty">' + escapeHtml(UI.historyEmpty) + '</div>';
                     return;
                 }
                 body.innerHTML = '';
+                const dateLocale = UI.dateLocale || undefined;
                 rows.forEach(function (row) {
                     const rowEl = document.createElement('div');
                     rowEl.className = 'history-row';
@@ -649,8 +753,8 @@
                     const main = document.createElement('div');
                     main.className = 'history-row-main';
                     const ts = row.updated_at || row.created_at;
-                    const dt = ts ? new Date(ts).toLocaleString() : '';
-                    const typeLabel = row.type === 'url' ? '网页' : 'HTML';
+                    const dt = ts ? new Date(ts).toLocaleString(dateLocale) : '';
+                    const typeLabel = row.type === 'url' ? UI.historyTypeUrl : UI.historyTypeHtml;
                     main.innerHTML =
                         '<div class="history-row-meta">' +
                         escapeHtml(typeLabel) +
@@ -668,7 +772,8 @@
                 setupHistoryThumbObserver();
             } catch (e) {
                 console.error(e);
-                body.innerHTML = '<div class="history-empty">加载失败</div>';
+                body.innerHTML =
+                    '<div class="history-empty">' + escapeHtml(UI.historyLoadError) + '</div>';
             }
         }
 
@@ -685,13 +790,13 @@
                 });
                 if (!response.ok) {
                     const err = await response.json().catch(function () { return {}; });
-                    alert(err.detail || '恢复失败');
+                    alert(err.detail || UI.restoreFailed);
                     return;
                 }
                 closeHistoryPanel();
             } catch (e) {
                 console.error(e);
-                alert('恢复失败');
+                alert(UI.restoreFailed);
             }
         }
 
@@ -712,32 +817,28 @@
                         return;
                     }
                 } catch (err) {
-                    console.error('iframe 打印失败:', err);
+                    console.error('iframe print:', err);
                 }
             }
             window.print();
         }
 
-        // 更新显示内容
         function updateDisplay(data) {
             const whiteboard = document.getElementById('whiteboard');
             if (data.type === 'url') {
                 whiteboard.innerHTML = `<iframe src="${data.content}" style="width:100%;height:100%;border:none;"></iframe>`;
             } else {
-                // 检测是否为完整的HTML页面
-                const isFullHtmlPage = /<html[\s>]/i.test(data.content) || 
-                                      /<head[\s>]/i.test(data.content) || 
+                const isFullHtmlPage = /<html[\s>]/i.test(data.content) ||
+                                      /<head[\s>]/i.test(data.content) ||
                                       /<body[\s>]/i.test(data.content) ||
                                       /<!DOCTYPE\s+html/i.test(data.content) ||
                                       (/<script[\s>]/i.test(data.content) && /<\/script>/i.test(data.content)) ||
                                       (/<style[\s>]/i.test(data.content) && /<\/style>/i.test(data.content));
-                
+
                 if (isFullHtmlPage) {
-                    // 如果是完整的HTML页面，使用iframe + blob URL
                     const blob = new Blob([data.content], { type: 'text/html' });
                     const url = URL.createObjectURL(blob);
-                    
-                    // 清理之前的blob URL
+
                     const existingIframe = whiteboard.querySelector('iframe[data-blob-url]');
                     if (existingIframe) {
                         const oldUrl = existingIframe.getAttribute('data-blob-url');
@@ -745,32 +846,29 @@
                             URL.revokeObjectURL(oldUrl);
                         }
                     }
-                    
+
                     whiteboard.innerHTML = `<iframe src="${url}" data-blob-url="${url}" style="width:100%;height:100%;border:none;"></iframe>`;
                 } else {
-                    // 如果只是HTML片段，直接使用innerHTML
                     whiteboard.innerHTML = data.content;
                 }
             }
         }
 
-        // 更新内容
         async function updateContent(type) {
             let content;
             if (type === 'url') {
                 content = document.getElementById('urlInput').value.trim();
-                
-                // 自动补充协议前缀
+
                 if (content && !content.match(/^https?:\/\//i)) {
                     content = 'https://' + content;
-                    document.getElementById('urlInput').value = content; // 更新显示的URL
+                    document.getElementById('urlInput').value = content;
                 }
             } else {
                 content = document.getElementById('contentInput').value.trim();
             }
-            
+
             if (!content) {
-                alert('请输入内容');
+                alert(UI.enterContent);
                 return;
             }
 
@@ -785,65 +883,56 @@
                         content: content
                     })
                 });
-                
+
                 if (response.ok) {
-                    console.log('更新成功');
-                    
-                    // 如果是HTML更新成功，收起HTML编辑区域
                     if (type === 'html') {
-                        // 如果HTML编辑区域是展开状态，则收起它
                         const htmlSection = document.getElementById('htmlSection');
                         if (htmlSection.classList.contains('expanded')) {
                             toggleHtmlSection();
                         }
                     }
                 } else {
-                    alert('更新失败');
+                    alert(UI.updateFailed);
                 }
             } catch (error) {
-                console.error('更新失败:', error);
-                alert('更新失败');
+                console.error(error);
+                alert(UI.updateFailed);
             }
         }
 
-        // 切换HTML编辑区域显示/隐藏
         async function toggleHtmlSection() {
             const htmlSection = document.getElementById('htmlSection');
             const controls = document.getElementById('controls');
             const toggleBtn = document.getElementById('toggleBtn');
-            
+
             if (htmlSection.classList.contains('expanded')) {
                 htmlSection.classList.remove('expanded');
                 controls.classList.add('collapsed');
-                toggleBtn.textContent = '输入HTML';
+                toggleBtn.textContent = UI.enterHtml;
                 updateWhiteboardMargin();
             } else {
                 htmlSection.classList.add('expanded');
                 controls.classList.remove('collapsed');
-                toggleBtn.textContent = '收起';
+                toggleBtn.textContent = UI.collapse;
                 updateWhiteboardMargin();
-                
-                // 展开时自动加载当前内容
+
                 await loadCurrentHtmlContent();
             }
         }
 
-        // 更新白板区域的上边距
         function updateWhiteboardMargin() {
             setTimeout(() => {
                 const controls = document.getElementById('controls');
                 const whiteboard = document.getElementById('whiteboard');
                 const controlsHeight = controls.offsetHeight;
                 whiteboard.style.paddingTop = (controlsHeight + 10) + 'px';
-            }, 300); // 等待CSS过渡完成
+            }, 300);
         }
 
-        // 清空内容
         function clearContent() {
             document.getElementById('contentInput').value = '';
         }
 
-        // 加载当前HTML内容到编辑框
         async function loadCurrentHtmlContent() {
             try {
                 const response = await fetch('/api/content');
@@ -851,52 +940,43 @@
                 if (data.type === 'html') {
                     document.getElementById('contentInput').value = data.content;
                 }
-                // 如果是URL类型，HTML编辑框保持为空，因为我们无法获取外部URL的HTML源码
             } catch (error) {
-                console.error('加载HTML内容失败:', error);
+                console.error(error);
             }
         }
 
-        // 加载当前内容到相应的输入框
         async function loadCurrentContent() {
             try {
                 const response = await fetch('/api/content');
                 const data = await response.json();
                 if (data.type === 'html') {
-                    // HTML类型：URL框清空，HTML框不操作（因为可能处于收起状态）
                     document.getElementById('urlInput').value = '';
                 } else if (data.type === 'url') {
-                    // URL类型：显示URL，HTML框清空
                     document.getElementById('urlInput').value = data.content;
                     document.getElementById('contentInput').value = '';
                 }
                 lastContent = data;
+                updateDisplay(data);
                 updatePdfMenuState();
             } catch (error) {
-                console.error('加载内容失败:', error);
+                console.error(error);
             }
         }
 
-        // 页面加载时初始化
         window.addEventListener('load', async () => {
             initSSE();
-            updateWhiteboardMargin(); // 初始化白板边距
-            
-            // 加载当前内容到相应的输入框
+            updateWhiteboardMargin();
+
             await loadCurrentContent();
-            
-            // 添加键盘快捷键
+
             const contentInput = document.getElementById('contentInput');
             const urlInput = document.getElementById('urlInput');
-            
-            // HTML编辑区域的快捷键
+
             contentInput.addEventListener('keydown', (e) => {
-                // Ctrl+Enter 更新HTML内容
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     e.preventDefault();
                     updateContent('html');
                 }
-                // Tab键插入4个空格
                 if (e.key === 'Tab') {
                     e.preventDefault();
                     const start = contentInput.selectionStart;
@@ -906,17 +986,14 @@
                     contentInput.selectionStart = contentInput.selectionEnd = start + 4;
                 }
             });
-            
-            // URL输入框的快捷键
+
             urlInput.addEventListener('keydown', (e) => {
-                // Enter键更新URL
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     updateContent('url');
                 }
             });
-            
-            // URL输入框失去焦点时自动补充协议（可选的额外改进）
+
             urlInput.addEventListener('blur', (e) => {
                 let value = e.target.value.trim();
                 if (value && !value.match(/^https?:\/\//i)) {
@@ -925,20 +1002,24 @@
             });
 
             document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && isHistoryPanelOpen()) {
+                if (e.key !== 'Escape') return;
+                if (isSettingsPanelOpen()) {
+                    e.preventDefault();
+                    closeSettingsPanel();
+                    return;
+                }
+                if (isHistoryPanelOpen()) {
                     e.preventDefault();
                     closeHistoryPanel();
                 }
             });
         });
 
-        // 页面卸载时清理
         window.addEventListener('unload', () => {
             if (eventSource) {
                 eventSource.close();
             }
-            
-            // 清理blob URL
+
             const whiteboard = document.getElementById('whiteboard');
             const iframe = whiteboard.querySelector('iframe[data-blob-url]');
             if (iframe) {
@@ -950,4 +1031,4 @@
         });
     </script>
 </body>
-</html> 
+</html>

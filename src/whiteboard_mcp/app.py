@@ -18,6 +18,8 @@ from sse_starlette.sse import EventSourceResponse
 from mcp.server.fastmcp import FastMCP
 
 from . import history_store
+from . import user_config
+from .ui_i18n import Language, api_detail, ui_strings_for
 
 # 获取当前文件所在目录
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,11 +39,20 @@ class ContentUpdate(BaseModel):
     content: str
 
 
+class UiConfigUpdate(BaseModel):
+    language: Literal["en", "zh"]
+
+
+def _active_lang(request: Request | None) -> Language:
+    header = request.headers.get("accept-language") if request else None
+    return user_config.resolve_ui_language(header)
+
+
 def load_content():
     if CONTENT_FILE.exists():
         with open(CONTENT_FILE, "r") as f:
             return json.load(f)
-    return {"type": "html", "content": "<h1>欢迎使用白板</h1>"}
+    return {"type": "html", "content": "<h1>Welcome to the whiteboard</h1>"}
 
 
 def save_content(content):
@@ -106,10 +117,15 @@ app = FastAPI(title="Whiteboard Service", lifespan=app_lifespan)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    lang = _active_lang(request)
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request},
+        context={
+            "request": request,
+            "lang": lang,
+            "ui_strings": ui_strings_for(lang),
+        },
     )
 
 
@@ -141,24 +157,44 @@ async def api_history_list():
 
 
 @app.post("/api/history/{record_id}/restore")
-async def api_history_restore(record_id: str):
+async def api_history_restore(record_id: str, request: Request):
+    lang = _active_lang(request)
     payload = history_store.resolve_restore_payload(record_id)
     if payload is None:
-        raise HTTPException(status_code=404, detail="记录不存在或文件缺失")
+        raise HTTPException(
+            status_code=404,
+            detail=api_detail(lang, "history_not_found"),
+        )
     ctype, body = payload
     if ctype == "html":
         return await apply_content_update(ContentUpdate(type="html", content=body))
     if ctype == "url":
         return await apply_content_update(ContentUpdate(type="url", content=body))
-    raise HTTPException(status_code=500, detail="无效的记录类型")
+    raise HTTPException(
+        status_code=500,
+        detail=api_detail(lang, "history_invalid_type"),
+    )
 
 
 @app.get("/api/history/{record_id}/html")
-async def api_history_raw_html(record_id: str):
+async def api_history_raw_html(record_id: str, request: Request):
+    lang = _active_lang(request)
     path = history_store.html_file_path(record_id)
     if path is None:
-        raise HTTPException(status_code=404, detail="不是 HTML 记录或文件不存在")
+        raise HTTPException(
+            status_code=404,
+            detail=api_detail(lang, "history_html_missing"),
+        )
     return FileResponse(path, media_type="text/html; charset=utf-8")
+
+
+@app.post("/api/ui-config")
+async def api_ui_config(body: UiConfigUpdate):
+    try:
+        user_config.set_language(body.language)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid language")
+    return {"ok": True}
 
 
 @app.get("/api/events")

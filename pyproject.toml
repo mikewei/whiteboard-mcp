@@ -12,7 +12,8 @@ dependencies = [
     "sse-starlette>=1.6.0",
     "requests>=2.31.0",
     "mcp>=1.0.0",
-    "anyio>=4.0.0"
+    "anyio>=4.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.scripts]

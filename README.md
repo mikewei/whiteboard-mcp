@@ -23,6 +23,23 @@ uv run whiteboard_mcp
 
 The server listens on `0.0.0.0:5000` by default.
 
+## Web UI language
+
+The web UI supports **English** (`en`) and **Chinese** (`zh`).
+
+- **Config file:** `~/.whiteboard-mcp/config.yaml`
+- **Key:** `language`, value `en` or `zh`
+
+If `language` is **not** set in that file (or the file is missing), the UI language follows the browser **`Accept-Language`** header: **Chinese** (`zh`, `zh-CN`, etc.) maps to Chinese; anything else defaults to **English**.
+
+Example:
+
+```yaml
+language: zh
+```
+
+You can edit this file by hand, or use **More (⋯) → Settings** in the web UI, choose a language, and click **Save** (the server writes the same file and reloads the page).
+
 ## MCP endpoints
 
 | Transport       | URL (local)                                      |
