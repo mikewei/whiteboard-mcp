@@ -110,3 +110,24 @@ def test_upsert_unknown_type_raises(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("WHITEBOARD_STORE_DIR", str(tmp_path / "store"))
     with pytest.raises(ValueError, match="unknown content type"):
         history_store.upsert_record(content_type="image", content="x")
+
+
+def test_delete_record_removes_html_file_and_entry(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("WHITEBOARD_STORE_DIR", str(tmp_path / "store"))
+    html = "<p>gone</p>"
+    key = history_store.upsert_record(content_type="html", content=html)
+    root = history_store.get_store_root()
+    html_path = root / "files" / f"{key}.html"
+    assert html_path.is_file()
+    assert history_store.delete_record(key) is True
+    assert history_store.delete_record(key) is False
+    assert history_store.find_record(key) is None
+    assert not html_path.is_file()
+
+
+def test_delete_record_url_only(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("WHITEBOARD_STORE_DIR", str(tmp_path / "store"))
+    url = "https://example.com/del"
+    key = history_store.upsert_record(content_type="url", content=url)
+    assert history_store.delete_record(key) is True
+    assert history_store.find_record(key) is None

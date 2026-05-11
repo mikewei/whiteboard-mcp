@@ -95,6 +95,28 @@ def test_history_raw_html_404_for_url_record(client: TestClient) -> None:
     assert r.status_code == 404
 
 
+def test_history_delete_ok(client: TestClient) -> None:
+    client.post("/api/content", json={"type": "html", "content": "<p>api-delete-test</p>"})
+    rows = client.get("/api/history").json()
+    html_rows = [x for x in rows if x["type"] == "html"]
+    assert html_rows
+    hid = html_rows[0]["id"]
+    dr = client.delete(f"/api/history/{hid}")
+    assert dr.status_code == 200
+    assert dr.json() == {"ok": True}
+    rows2 = client.get("/api/history").json()
+    assert all(r["id"] != hid for r in rows2)
+
+
+def test_history_delete_404_zh_detail(client: TestClient) -> None:
+    r = client.delete(
+        "/api/history/" + "c" * 64,
+        headers={"Accept-Language": "zh-CN,zh;q=0.9"},
+    )
+    assert r.status_code == 404
+    assert r.json()["detail"] == "记录不存在或文件缺失"
+
+
 def test_ui_config_valid(client: TestClient) -> None:
     assert client.post("/api/ui-config", json={"language": "en"}).json() == {"ok": True}
     assert client.post("/api/ui-config", json={"language": "zh"}).json() == {"ok": True}

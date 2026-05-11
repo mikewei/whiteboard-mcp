@@ -228,15 +228,23 @@
         .history-panel-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 12px;
             padding: 14px 16px;
             border-bottom: 1px solid #e8e8e8;
+            flex-shrink: 0;
+        }
+        .history-panel-header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             flex-shrink: 0;
         }
         .history-panel-header h2 {
             margin: 0;
             font-size: 16px;
             font-weight: 600;
+            flex: 1;
+            min-width: 0;
         }
         .history-panel-close {
             margin: 0;
@@ -249,6 +257,36 @@
         }
         .history-panel-close:hover {
             background: #f8f9fa;
+        }
+        .history-panel-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .history-panel-toolbtn {
+            margin: 0;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .history-panel-toolbtn:hover:not(:disabled) {
+            background: #f8f9fa;
+        }
+        .history-panel-toolbtn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .history-panel-toolbtn.history-delete-btn {
+            border-color: #c62828;
+            color: #b71c1d;
+        }
+        .history-panel-toolbtn.history-delete-btn:hover:not(:disabled) {
+            background: #ffebee;
         }
         .history-panel-body {
             overflow-y: auto;
@@ -272,6 +310,18 @@
             align-items: stretch;
             gap: 12px;
             box-sizing: border-box;
+        }
+        .history-row-check {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            padding-right: 2px;
+        }
+        .history-row-checkbox {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            margin: 0;
         }
         .history-row:last-child {
             border-bottom: none;
@@ -393,7 +443,13 @@
         <div class="history-panel" role="dialog" aria-labelledby="historyPanelTitle" onclick="event.stopPropagation()">
             <div class="history-panel-header">
                 <h2 id="historyPanelTitle">{{ ui_strings.historyTitle }}</h2>
-                <button type="button" class="history-panel-close" onclick="closeHistoryPanel()" aria-label="{{ ui_strings.closeAria }}">{{ ui_strings.close }}</button>
+                <div class="history-panel-header-right">
+                    <div class="history-panel-toolbar" id="historyPanelToolbar">
+                        <button type="button" class="history-panel-toolbtn history-delete-btn" id="historyBulkDeleteBtn" style="display: none" disabled onclick="deleteSelectedHistory(event)">{{ ui_strings.historyDeleteSelected }}</button>
+                        <button type="button" class="history-panel-toolbtn" id="historyEditToggleBtn" onclick="onHistoryEditToggleClick(event)">{{ ui_strings.historyEdit }}</button>
+                    </div>
+                    <button type="button" class="history-panel-close" onclick="closeHistoryPanel()" aria-label="{{ ui_strings.closeAria }}">{{ ui_strings.close }}</button>
+                </div>
             </div>
             <div class="history-panel-body" id="historyPanelBody">
                 <div class="history-empty" id="historyEmpty">{{ ui_strings.loading }}</div>
@@ -406,6 +462,8 @@
         const UI = {{ ui_strings | tojson }};
         let lastContent = null;
         let eventSource = null;
+        let historyEditMode = false;
+        const historySelectedIds = new Set();
 
         function initSSE() {
             if (eventSource) {
@@ -476,6 +534,68 @@
         function isHistoryPanelOpen() {
             const el = document.getElementById('historyOverlay');
             return el && el.classList.contains('is-open');
+        }
+
+        function syncHistoryToolbar() {
+            const editBtn = document.getElementById('historyEditToggleBtn');
+            const delBtn = document.getElementById('historyBulkDeleteBtn');
+            if (!editBtn || !delBtn) return;
+            editBtn.textContent = historyEditMode ? UI.historyCancelEdit : UI.historyEdit;
+            if (historyEditMode) {
+                delBtn.style.display = '';
+                delBtn.disabled = historySelectedIds.size === 0;
+            } else {
+                delBtn.style.display = 'none';
+                delBtn.disabled = true;
+            }
+        }
+
+        function exitHistoryEditMode() {
+            historyEditMode = false;
+            historySelectedIds.clear();
+            syncHistoryToolbar();
+        }
+
+        function onHistoryEditToggleClick(ev) {
+            if (ev) ev.stopPropagation();
+            if (historyEditMode) {
+                exitHistoryEditMode();
+            } else {
+                historyEditMode = true;
+                syncHistoryToolbar();
+            }
+            loadHistory();
+        }
+
+        async function deleteSelectedHistory(ev) {
+            if (ev) ev.stopPropagation();
+            if (historySelectedIds.size === 0) return;
+            const count = historySelectedIds.size;
+            const msg = UI.historyDeleteConfirm.replace('{count}', String(count));
+            if (!confirm(msg)) return;
+            const ids = Array.from(historySelectedIds);
+            let failed = 0;
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i];
+                try {
+                    const response = await fetch('/api/history/' + encodeURIComponent(id), {
+                        method: 'DELETE',
+                    });
+                    if (!response.ok) failed++;
+                } catch (e) {
+                    console.error(e);
+                    failed++;
+                }
+            }
+            exitHistoryEditMode();
+            await loadHistory();
+            if (failed > 0) {
+                if (failed === ids.length) {
+                    alert(UI.historyDeleteFailed);
+                } else {
+                    alert(UI.historyDeletePartial.replace('{failed}', String(failed)));
+                }
+            }
         }
 
         function isSettingsPanelOpen() {
@@ -679,6 +799,7 @@
 
         function closeHistoryPanel() {
             teardownHistoryThumbs();
+            exitHistoryEditMode();
             const el = document.getElementById('historyOverlay');
             if (!el) return;
             el.classList.remove('is-open');
@@ -700,6 +821,9 @@
                 if (!response.ok) throw new Error(UI.historyLoadError);
                 const rows = await response.json();
                 if (!rows.length) {
+                    if (historyEditMode) {
+                        exitHistoryEditMode();
+                    }
                     body.innerHTML =
                         '<div class="history-empty">' + escapeHtml(UI.historyEmpty) + '</div>';
                     return;
@@ -709,17 +833,77 @@
                 rows.forEach(function (row) {
                     const rowEl = document.createElement('div');
                     rowEl.className = 'history-row';
-                    rowEl.setAttribute('role', 'button');
-                    rowEl.tabIndex = 0;
-                    rowEl.addEventListener('click', function () {
+                    if (historyEditMode) {
+                        rowEl.classList.add('history-row--edit');
+                        rowEl.removeAttribute('role');
+                        rowEl.tabIndex = -1;
+                    } else {
+                        rowEl.setAttribute('role', 'button');
+                        rowEl.tabIndex = 0;
+                    }
+
+                    rowEl.addEventListener('click', function (ev) {
+                        if (historyEditMode) {
+                            if (ev.target.closest('.history-row-checkbox')) return;
+                            ev.preventDefault();
+                            if (historySelectedIds.has(row.id)) {
+                                historySelectedIds.delete(row.id);
+                            } else {
+                                historySelectedIds.add(row.id);
+                            }
+                            const cb = rowEl.querySelector('.history-row-checkbox');
+                            if (cb) cb.checked = historySelectedIds.has(row.id);
+                            syncHistoryToolbar();
+                            return;
+                        }
                         restoreHistoryEntry(row.id);
                     });
                     rowEl.addEventListener('keydown', function (e) {
+                        if (historyEditMode) {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                if (historySelectedIds.has(row.id)) {
+                                    historySelectedIds.delete(row.id);
+                                } else {
+                                    historySelectedIds.add(row.id);
+                                }
+                                const cb = rowEl.querySelector('.history-row-checkbox');
+                                if (cb) cb.checked = historySelectedIds.has(row.id);
+                                syncHistoryToolbar();
+                            }
+                            return;
+                        }
                         if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
                             restoreHistoryEntry(row.id);
                         }
                     });
+
+                    if (historyEditMode) {
+                        const checkWrap = document.createElement('div');
+                        checkWrap.className = 'history-row-check';
+                        const chk = document.createElement('input');
+                        chk.type = 'checkbox';
+                        chk.className = 'history-row-checkbox';
+                        chk.checked = historySelectedIds.has(row.id);
+                        chk.setAttribute(
+                            'aria-label',
+                            UI.historySelectEntry + ': ' + (row.preview || row.id || '').toString().slice(0, 120)
+                        );
+                        chk.addEventListener('change', function () {
+                            if (chk.checked) {
+                                historySelectedIds.add(row.id);
+                            } else {
+                                historySelectedIds.delete(row.id);
+                            }
+                            syncHistoryToolbar();
+                        });
+                        chk.addEventListener('click', function (e) {
+                            e.stopPropagation();
+                        });
+                        checkWrap.appendChild(chk);
+                        rowEl.appendChild(checkWrap);
+                    }
 
                     const thumbWrap = document.createElement('div');
                     thumbWrap.className = 'history-thumb-wrap';
@@ -770,6 +954,7 @@
                     body.appendChild(rowEl);
                 });
                 setupHistoryThumbObserver();
+                syncHistoryToolbar();
             } catch (e) {
                 console.error(e);
                 body.innerHTML =
@@ -1013,6 +1198,8 @@
                     closeHistoryPanel();
                 }
             });
+
+            syncHistoryToolbar();
         });
 
         window.addEventListener('unload', () => {

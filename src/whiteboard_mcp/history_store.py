@@ -226,3 +226,25 @@ def html_file_path(record_id: str) -> Path | None:
         return None
     path = get_store_root() / rel
     return path if path.is_file() else None
+
+
+def delete_record(record_id: str) -> bool:
+    """Remove one history entry and delete stored HTML file if applicable."""
+    root = get_store_root()
+    entries = _load_entries_raw(root)
+    rec = entries.pop(record_id, None)
+    if rec is None:
+        return False
+    html_rel: str | None = None
+    if rec.get("type") == "html":
+        rel = rec.get("html_file")
+        if isinstance(rel, str):
+            html_rel = rel
+    _save_entries(root, entries)
+    if html_rel:
+        path = root / html_rel
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return True

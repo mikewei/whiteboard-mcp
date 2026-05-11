@@ -156,6 +156,17 @@ async def api_history_list():
     return out
 
 
+@app.delete("/api/history/{record_id}")
+async def api_history_delete(record_id: str, request: Request):
+    lang = _active_lang(request)
+    if not history_store.delete_record(record_id):
+        raise HTTPException(
+            status_code=404,
+            detail=api_detail(lang, "history_not_found"),
+        )
+    return {"ok": True}
+
+
 @app.post("/api/history/{record_id}/restore")
 async def api_history_restore(record_id: str, request: Request):
     lang = _active_lang(request)
