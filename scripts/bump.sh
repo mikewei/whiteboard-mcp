@@ -52,6 +52,20 @@ fi
 git add pyproject.toml CHANGELOG.md uv.lock
 git commit -m "release: ${tag}"
 git tag -a "${tag}" -m "${tag}"
+git push origin
+
+echo "Released ${tag}"
+
+# publish pypi
+read -p "Confirm publish to PYPI? (y/n) " confirm
+if [ "$confirm" != "y" ]; then
+    echo "No publish"
+    exit 0
+fi
+rm -rf dist
+uv sync
+uv build && twine upload dist/*
 
 # all done
-echo "Released ${tag}"
+echo "Publish ${tag}, all done."
+
