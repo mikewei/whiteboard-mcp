@@ -37,6 +37,14 @@ def _preview_html(html: str, max_len: int = 120) -> str:
     return text or "(HTML)"
 
 
+def _preview_markdown(md: str, max_len: int = 120) -> str:
+    line = md.strip().split("\n", 1)[0].strip()
+    line = line.lstrip("#").strip() or line
+    if len(line) > max_len:
+        return line[: max_len - 1] + "…"
+    return line or "(Markdown)"
+
+
 def _history_json_path(root: Path) -> Path:
     return root / "history.json"
 
@@ -159,6 +167,20 @@ def upsert_record(*, content_type: str, content: str) -> str:
             "preview": preview,
             "html_file": rel,
         }
+    elif content_type == "markdown":
+        files_dir = root / "files"
+        files_dir.mkdir(parents=True, exist_ok=True)
+        md_name = f"{key}.md"
+        rel = f"files/{md_name}"
+        path = root / rel
+        path.write_text(content, encoding="utf-8")
+        preview = _preview_markdown(content)
+        entries[key] = {
+            "type": "markdown",
+            "updated_at": now,
+            "preview": preview,
+            "md_file": rel,
+        }
     elif content_type == "url":
         preview = content if len(content) <= 120 else content[:119] + "…"
         entries[key] = {
@@ -213,6 +235,14 @@ def resolve_restore_payload(record_id: str) -> tuple[str, str] | None:
         if not path.is_file():
             return None
         return ("html", path.read_text(encoding="utf-8"))
+    if t == "markdown":
+        rel = rec.get("md_file")
+        if not isinstance(rel, str):
+            return None
+        path = get_store_root() / rel
+        if not path.is_file():
+            return None
+        return ("markdown", path.read_text(encoding="utf-8"))
     return None
 
 
@@ -229,22 +259,38 @@ def html_file_path(record_id: str) -> Path | None:
 
 
 def delete_record(record_id: str) -> bool:
-    """Remove one history entry and delete stored HTML file if applicable."""
+    """Remove one history entry and delete stored HTML or Markdown file if applicable."""
     root = get_store_root()
     entries = _load_entries_raw(root)
     rec = entries.pop(record_id, None)
     if rec is None:
         return False
-    html_rel: str | None = None
+    file_rel: str | None = None
     if rec.get("type") == "html":
         rel = rec.get("html_file")
         if isinstance(rel, str):
-            html_rel = rel
+            file_rel = rel
+    elif rec.get("type") == "markdown":
+        rel = rec.get("md_file")
+        if isinstance(rel, str):
+            file_rel = rel
     _save_entries(root, entries)
-    if html_rel:
-        path = root / html_rel
+    if file_rel:
+        path = root / file_rel
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
     return True
+
+
+def md_file_path(record_id: str) -> Path | None:
+    """Absolute path to stored Markdown file for this hash id, if any."""
+    rec = find_record(record_id)
+    if not rec or rec.get("type") != "markdown":
+        return None
+    rel = rec.get("md_file")
+    if not isinstance(rel, str):
+        return None
+    path = get_store_root() / rel
+    return path if path.is_file() else None

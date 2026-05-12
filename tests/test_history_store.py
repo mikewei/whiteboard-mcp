@@ -131,3 +131,28 @@ def test_delete_record_url_only(monkeypatch, tmp_path) -> None:
     key = history_store.upsert_record(content_type="url", content=url)
     assert history_store.delete_record(key) is True
     assert history_store.find_record(key) is None
+
+
+def test_upsert_markdown_writes_file_and_restore(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("WHITEBOARD_STORE_DIR", str(tmp_path / "store"))
+    body = "# Hello\n\n$x^2$"
+    key = history_store.upsert_record(content_type="markdown", content=body)
+    assert len(key) == 64
+    root = history_store.get_store_root()
+    md_path = root / "files" / f"{key}.md"
+    assert md_path.read_text(encoding="utf-8") == body
+    assert history_store.resolve_restore_payload(key) == ("markdown", body)
+    path = history_store.md_file_path(key)
+    assert path is not None
+    assert path.read_text(encoding="utf-8") == body
+
+
+def test_delete_record_removes_md_file(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("WHITEBOARD_STORE_DIR", str(tmp_path / "store"))
+    md = "# x"
+    key = history_store.upsert_record(content_type="markdown", content=md)
+    root = history_store.get_store_root()
+    md_path = root / "files" / f"{key}.md"
+    assert md_path.is_file()
+    assert history_store.delete_record(key) is True
+    assert not md_path.exists()

@@ -35,7 +35,7 @@ active_connections: List[asyncio.Queue] = []
 
 
 class ContentUpdate(BaseModel):
-    type: Literal["html", "url"]
+    type: Literal["html", "url", "markdown"]
     content: str
 
 
@@ -53,6 +53,14 @@ def load_content():
         with open(CONTENT_FILE, "r") as f:
             return json.load(f)
     return {"type": "html", "content": "<h1>Welcome to the whiteboard</h1>"}
+
+
+def public_content_payload(stored: dict) -> dict:
+    """Response/SSE shape: current board plus `history_id` (hash key in history store)."""
+    return {
+        **stored,
+        "history_id": history_store.content_hash(stored["type"], stored["content"]),
+    }
 
 
 def save_content(content):
@@ -75,7 +83,7 @@ async def apply_content_update(content: ContentUpdate):
     }
     save_content(content_data)
     history_store.upsert_record(content_type=content.type, content=content.content)
-    await notify_clients(content_data)
+    await notify_clients(public_content_payload(content_data))
     return {"message": "内容已更新"}
 
 
@@ -100,6 +108,13 @@ async def update_whiteboard_url(url: str):
 async def update_whiteboard_html(html: str):
     """通过指定HTML更新白板内容"""
     await apply_content_update(ContentUpdate(type="html", content=html))
+    return {"message": "whiteboard updated"}
+
+
+@mcp.tool()
+async def update_whiteboard_markdown(markdown: str):
+    """通过指定 Markdown 更新白板内容"""
+    await apply_content_update(ContentUpdate(type="markdown", content=markdown))
     return {"message": "whiteboard updated"}
 
 
@@ -131,7 +146,7 @@ async def index(request: Request):
 
 @app.get("/api/content")
 async def get_content():
-    return load_content()
+    return public_content_payload(load_content())
 
 
 @app.post("/api/content")
@@ -181,6 +196,8 @@ async def api_history_restore(record_id: str, request: Request):
         return await apply_content_update(ContentUpdate(type="html", content=body))
     if ctype == "url":
         return await apply_content_update(ContentUpdate(type="url", content=body))
+    if ctype == "markdown":
+        return await apply_content_update(ContentUpdate(type="markdown", content=body))
     raise HTTPException(
         status_code=500,
         detail=api_detail(lang, "history_invalid_type"),
@@ -197,6 +214,18 @@ async def api_history_raw_html(record_id: str, request: Request):
             detail=api_detail(lang, "history_html_missing"),
         )
     return FileResponse(path, media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/history/{record_id}/md")
+async def api_history_raw_md(record_id: str, request: Request):
+    lang = _active_lang(request)
+    path = history_store.md_file_path(record_id)
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail=api_detail(lang, "history_md_missing"),
+        )
+    return FileResponse(path, media_type="text/markdown; charset=utf-8")
 
 
 @app.post("/api/ui-config")
@@ -216,7 +245,7 @@ async def events():
         queue = asyncio.Queue()
         active_connections.append(queue)
         try:
-            initial_content = load_content()
+            initial_content = public_content_payload(load_content())
             yield {
                 "event": "message",
                 "data": json.dumps(initial_content),

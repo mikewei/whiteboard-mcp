@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ ui_strings.title }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.6.1/github-markdown.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" crossorigin="anonymous">
     <style>
         body {
             margin: 0;
@@ -367,6 +370,35 @@
             color: #222;
             word-break: break-all;
         }
+        .history-thumb-md {
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #333;
+            overflow: hidden;
+            word-break: break-word;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            background: linear-gradient(145deg, #f0f4ff 0%, #e8ecf4 100%);
+        }
+        #whiteboard .wb-markdown-root {
+            box-sizing: border-box;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 24px 28px 48px;
+        }
+        #whiteboard .wb-markdown-root.markdown-body {
+            background: #ffffff;
+            color: #24292f;
+        }
+        #whiteboard.markdown-drag-over {
+            outline: 2px dashed #007bff;
+            outline-offset: -4px;
+        }
         @media print {
             .menu-backdrop {
                 display: none !important;
@@ -396,6 +428,8 @@
                 <div class="overflow-dropdown" id="overflowDropdown" role="menu">
                     <button type="button" id="historyPanelBtn" role="menuitem" onclick="openHistoryPanel(event)">{{ ui_strings.history }}</button>
                     <button type="button" id="downloadPdfBtn" role="menuitem" onclick="downloadAsPdf(event)">{{ ui_strings.downloadPdf }}</button>
+                    <button type="button" id="saveMdBtn" role="menuitem" onclick="saveCurrentMarkdown(event)">{{ ui_strings.saveMarkdown }}</button>
+                    <button type="button" id="saveHtmlExportBtn" role="menuitem" onclick="saveCurrentHtmlExport(event)">{{ ui_strings.saveHtmlExport }}</button>
                     <button type="button" id="settingsPanelBtn" role="menuitem" onclick="openSettingsPanel(event)">{{ ui_strings.settings }}</button>
                 </div>
             </div>
@@ -403,8 +437,10 @@
         <div class="html-section" id="htmlSection">
             <textarea id="contentInput" placeholder="{{ ui_strings.htmlPlaceholder }}"></textarea>
             <div class="button-container">
-                <button onclick="updateContent('html')">{{ ui_strings.updateHtml }}</button>
-                <button onclick="clearContent()">{{ ui_strings.clear }}</button>
+                <button type="button" onclick="applyEditorContent()">{{ ui_strings.updateHtml }}</button>
+                <input type="file" id="mdFileInput" accept=".md,.markdown,.txt,text/markdown,text/plain" style="display:none" aria-hidden="true">
+                <button type="button" onclick="document.getElementById('mdFileInput').click()">{{ ui_strings.pickMarkdownFile }}</button>
+                <button type="button" onclick="clearContent()">{{ ui_strings['clear'] }}</button>
             </div>
         </div>
     </div>
@@ -458,12 +494,240 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
     <script>
         const UI = {{ ui_strings | tojson }};
+        /** Must match default HTML in `load_content` in app.py */
+        const DEFAULT_BOARD_HTML = '<h1>Welcome to the whiteboard</h1>';
         let lastContent = null;
         let eventSource = null;
         let historyEditMode = false;
         const historySelectedIds = new Set();
+
+        let lastMarkdownBaseName = 'whiteboard';
+        const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
+
+        (function configureMarked() {
+            if (typeof marked === 'undefined') return;
+            marked.use({
+                gfm: true,
+                renderer: {
+                    code(snippet) {
+                        const code = snippet.text || snippet.raw || '';
+                        const lang = (snippet.lang || '').trim();
+                        let hl;
+                        try {
+                            if (typeof hljs !== 'undefined') {
+                                if (lang && hljs.getLanguage(lang)) {
+                                    hl = hljs.highlight(code, { language: lang }).value;
+                                } else {
+                                    hl = hljs.highlightAuto(code).value;
+                                }
+                            } else {
+                                const d = document.createElement('div');
+                                d.textContent = code;
+                                hl = d.innerHTML;
+                            }
+                        } catch (e) {
+                            const d = document.createElement('div');
+                            d.textContent = code;
+                            hl = d.innerHTML;
+                        }
+                        const langEsc = lang ? escapeHtml(lang) : '';
+                        return (
+                            '<pre><code class="hljs' +
+                            (langEsc ? ' language-' + langEsc : '') +
+                            '">' +
+                            hl +
+                            '</code></pre>'
+                        );
+                    },
+                },
+            });
+        })();
+
+        function isFullHtmlDocument(text) {
+            return (
+                /<html[\s>]/i.test(text) ||
+                /<head[\s>]/i.test(text) ||
+                /<body[\s>]/i.test(text) ||
+                /<!DOCTYPE\s+html/i.test(text) ||
+                (/<script[\s>]/i.test(text) && /<\/script>/i.test(text)) ||
+                (/<style[\s>]/i.test(text) && /<\/style>/i.test(text))
+            );
+        }
+
+        /** Heuristic: same textarea used for HTML fragments vs Markdown source. */
+        function detectContentKind(raw) {
+            const t = raw.trim();
+            if (!t) return 'markdown';
+            if (isFullHtmlDocument(t)) return 'html';
+            const firstLine = t.split('\n')[0].trim();
+            if (/^#{1,6}\s/.test(firstLine)) return 'markdown';
+            if (/^```/.test(firstLine)) return 'markdown';
+            if (/^---\s*$/.test(firstLine)) return 'markdown';
+            if (/^[\-\*\+]\s/.test(firstLine)) return 'markdown';
+            if (/^\d+\.\s/.test(firstLine)) return 'markdown';
+            if (/^<[a-zA-Z!?]/.test(t)) return 'html';
+            return 'markdown';
+        }
+
+        function sanitizeMarkdownHtml(html) {
+            if (typeof DOMPurify === 'undefined') return html;
+            return DOMPurify.sanitize(html, {
+                ADD_TAGS: ['details', 'summary'],
+                ADD_ATTR: ['target', 'rel'],
+            });
+        }
+
+        function renderMarkdownToElement(md) {
+            const html = marked.parse(md || '');
+            const clean = sanitizeMarkdownHtml(html);
+            const wrap = document.createElement('div');
+            wrap.className = 'markdown-body wb-markdown-root';
+            wrap.innerHTML = clean;
+            if (typeof renderMathInElement !== 'undefined') {
+                try {
+                    renderMathInElement(wrap, {
+                        delimiters: [
+                            { left: '$$', right: '$$', display: true },
+                            { left: '$', right: '$', display: false },
+                            { left: '\\(', right: '\\)', display: false },
+                            { left: '\\[', right: '\\]', display: true },
+                        ],
+                        throwOnError: false,
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+            return wrap;
+        }
+
+        function downloadBlob(text, filename, mime) {
+            const blob = new Blob([text], { type: mime });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+
+        function buildExportedHtmlShell(innerHtml) {
+            const ghMdCss =
+                'https://cdn.jsdelivr.net/npm/github-markdown-css@5.6.1/github-markdown.min.css';
+            const katexCss = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
+            const hlCss =
+                'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css';
+            return (
+                '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="utf-8">\n' +
+                '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+                '<link rel="stylesheet" href="' +
+                ghMdCss +
+                '" crossorigin="anonymous">\n' +
+                '<link rel="stylesheet" href="' +
+                katexCss +
+                '" crossorigin="anonymous">\n' +
+                '<link rel="stylesheet" href="' +
+                hlCss +
+                '" crossorigin="anonymous">\n' +
+                '<style>body{margin:0;background:#fff;} .markdown-body{box-sizing:border-box;min-height:100vh;max-width:980px;margin:0 auto;padding:24px 28px 48px;}</style>\n' +
+                '</head><body>\n' +
+                innerHtml +
+                '\n</body></html>'
+            );
+        }
+
+        async function applyEditorContent() {
+            const content = document.getElementById('contentInput').value.trim();
+            if (!content) {
+                alert(UI.enterContent);
+                return;
+            }
+            const kind = detectContentKind(content);
+            try {
+                const response = await fetch('/api/content', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: kind, content: content }),
+                });
+                if (response.ok) {
+                    lastMarkdownBaseName = 'whiteboard';
+                    const htmlSection = document.getElementById('htmlSection');
+                    if (htmlSection.classList.contains('expanded')) {
+                        toggleHtmlSection();
+                    }
+                } else {
+                    alert(UI.updateFailed);
+                }
+            } catch (error) {
+                console.error(error);
+                alert(UI.updateFailed);
+            }
+        }
+
+        function saveCurrentMarkdown(ev) {
+            if (ev) ev.stopPropagation();
+            setOverflowOpen(false);
+            if (!lastContent || lastContent.type !== 'markdown') return;
+            const name = lastMarkdownBaseName.replace(/[^\w\-\.\u00C0-\u024f]+/g, '_') || 'whiteboard';
+            downloadBlob(lastContent.content, name + '.md', 'text/markdown;charset=utf-8');
+        }
+
+        function saveCurrentHtmlExport(ev) {
+            if (ev) ev.stopPropagation();
+            setOverflowOpen(false);
+            if (!lastContent || (lastContent.type !== 'markdown' && lastContent.type !== 'html')) {
+                return;
+            }
+            const wb = document.getElementById('whiteboard');
+            let inner;
+            if (lastContent.type === 'markdown') {
+                const root = wb.querySelector('.wb-markdown-root');
+                inner = root ? root.outerHTML : '<div class="markdown-body"></div>';
+            } else {
+                const iframe = wb.querySelector('iframe[data-blob-url]');
+                if (iframe) {
+                    try {
+                        const doc = iframe.contentDocument;
+                        if (doc && doc.documentElement) {
+                            inner = doc.documentElement.outerHTML;
+                            downloadBlob(inner, 'whiteboard.html', 'text/html;charset=utf-8');
+                            return;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+                inner = '<div id="wb-html-export">' + (wb.innerHTML || '') + '</div>';
+            }
+            const doc = buildExportedHtmlShell(inner);
+            const base =
+                lastContent.type === 'markdown'
+                    ? lastMarkdownBaseName.replace(/[^\w\-\.\u00C0-\u024f]+/g, '_') || 'whiteboard'
+                    : 'whiteboard';
+            downloadBlob(doc, base + '.html', 'text/html;charset=utf-8');
+        }
+
+        function updateSaveMenuState() {
+            const mdBtn = document.getElementById('saveMdBtn');
+            const htmlBtn = document.getElementById('saveHtmlExportBtn');
+            const mdOk = lastContent && lastContent.type === 'markdown';
+            const htmlOk =
+                lastContent && (lastContent.type === 'markdown' || lastContent.type === 'html');
+            if (mdBtn) {
+                mdBtn.disabled = !mdOk;
+                mdBtn.title = mdOk ? '' : UI.saveOnlyMarkdown;
+            }
+            if (htmlBtn) {
+                htmlBtn.disabled = !htmlOk;
+                htmlBtn.title = htmlOk ? '' : UI.pdfOnlyHtml;
+            }
+        }
 
         function initSSE() {
             if (eventSource) {
@@ -478,12 +742,13 @@
                     if (data.type === 'url') {
                         document.getElementById('urlInput').value = data.content;
                         document.getElementById('contentInput').value = '';
-                    } else if (data.type === 'html') {
+                    } else if (data.type === 'html' || data.type === 'markdown') {
                         document.getElementById('urlInput').value = '';
                     }
                     lastContent = data;
                     updateDisplay(data);
                     updatePdfMenuState();
+                    updateSaveMenuState();
                 }
             };
 
@@ -495,7 +760,9 @@
 
         function updatePdfMenuState() {
             const pdfBtn = document.getElementById('downloadPdfBtn');
-            const ok = lastContent && lastContent.type === 'html';
+            const ok =
+                lastContent &&
+                (lastContent.type === 'html' || lastContent.type === 'markdown');
             if (pdfBtn) {
                 pdfBtn.disabled = !ok;
                 pdfBtn.title = ok ? '' : UI.pdfOnlyHtml;
@@ -567,6 +834,32 @@
             loadHistory();
         }
 
+        /** After delete, history list is newest-first; `rows[0]` is the top entry. */
+        async function switchToNewestHistoryOrDefault() {
+            try {
+                const hr = await fetch('/api/history');
+                if (!hr.ok) throw new Error('history');
+                const rows = await hr.json();
+                if (rows.length > 0) {
+                    const rr = await fetch(
+                        '/api/history/' + encodeURIComponent(rows[0].id) + '/restore',
+                        { method: 'POST' }
+                    );
+                    if (!rr.ok) throw new Error('restore');
+                } else {
+                    const pr = await fetch('/api/content', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: 'html', content: DEFAULT_BOARD_HTML }),
+                    });
+                    if (!pr.ok) throw new Error('default');
+                }
+            } catch (e) {
+                console.error(e);
+                alert(UI.restoreFailed);
+            }
+        }
+
         async function deleteSelectedHistory(ev) {
             if (ev) ev.stopPropagation();
             if (historySelectedIds.size === 0) return;
@@ -574,6 +867,8 @@
             const msg = UI.historyDeleteConfirm.replace('{count}', String(count));
             if (!confirm(msg)) return;
             const ids = Array.from(historySelectedIds);
+            const currentHid = lastContent && lastContent.history_id;
+            const okDeleted = [];
             let failed = 0;
             for (let i = 0; i < ids.length; i++) {
                 const id = ids[i];
@@ -581,13 +876,21 @@
                     const response = await fetch('/api/history/' + encodeURIComponent(id), {
                         method: 'DELETE',
                     });
-                    if (!response.ok) failed++;
+                    if (!response.ok) {
+                        failed++;
+                    } else {
+                        okDeleted.push(id);
+                    }
                 } catch (e) {
                     console.error(e);
                     failed++;
                 }
             }
+            const removedCurrent = currentHid && okDeleted.indexOf(currentHid) !== -1;
             exitHistoryEditMode();
+            if (removedCurrent) {
+                await switchToNewestHistoryOrDefault();
+            }
             await loadHistory();
             if (failed > 0) {
                 if (failed === ids.length) {
@@ -910,35 +1213,47 @@
                     thumbWrap.dataset.historyType = row.type;
                     thumbWrap.dataset.historyId = row.id;
 
-                    const img = document.createElement('img');
-                    img.className = 'history-thumb-img';
-                    img.alt = '';
-                    if (row.type === 'html') {
-                        img.classList.add('is-loading');
-                    }
-
-                    if (row.type === 'url' && row.url) {
-                        try {
-                            const u = new URL(row.url);
-                            img.src =
-                                'https://www.google.com/s2/favicons?domain=' +
-                                encodeURIComponent(u.hostname) +
-                                '&sz=128';
-                            img.onerror = function () {
-                                img.style.opacity = '0.35';
-                            };
-                        } catch (e1) {
-                            img.style.visibility = 'hidden';
+                    if (row.type === 'markdown') {
+                        const mdThumb = document.createElement('div');
+                        mdThumb.className = 'history-thumb-md';
+                        mdThumb.textContent = row.preview || 'Markdown';
+                        thumbWrap.appendChild(mdThumb);
+                    } else {
+                        const img = document.createElement('img');
+                        img.className = 'history-thumb-img';
+                        img.alt = '';
+                        if (row.type === 'html') {
+                            img.classList.add('is-loading');
                         }
-                    }
 
-                    thumbWrap.appendChild(img);
+                        if (row.type === 'url' && row.url) {
+                            try {
+                                const u = new URL(row.url);
+                                img.src =
+                                    'https://www.google.com/s2/favicons?domain=' +
+                                    encodeURIComponent(u.hostname) +
+                                    '&sz=128';
+                                img.onerror = function () {
+                                    img.style.opacity = '0.35';
+                                };
+                            } catch (e1) {
+                                img.style.visibility = 'hidden';
+                            }
+                        }
+
+                        thumbWrap.appendChild(img);
+                    }
 
                     const main = document.createElement('div');
                     main.className = 'history-row-main';
                     const ts = row.updated_at || row.created_at;
                     const dt = ts ? new Date(ts).toLocaleString(dateLocale) : '';
-                    const typeLabel = row.type === 'url' ? UI.historyTypeUrl : UI.historyTypeHtml;
+                    let typeLabel = UI.historyTypeHtml;
+                    if (row.type === 'url') {
+                        typeLabel = UI.historyTypeUrl;
+                    } else if (row.type === 'markdown') {
+                        typeLabel = UI.historyTypeMarkdown;
+                    }
                     main.innerHTML =
                         '<div class="history-row-meta">' +
                         escapeHtml(typeLabel) +
@@ -988,7 +1303,10 @@
         function downloadAsPdf(ev) {
             ev.stopPropagation();
             setOverflowOpen(false);
-            if (!lastContent || lastContent.type !== 'html') {
+            if (
+                !lastContent ||
+                (lastContent.type !== 'html' && lastContent.type !== 'markdown')
+            ) {
                 return;
             }
             const whiteboard = document.getElementById('whiteboard');
@@ -1012,13 +1330,16 @@
             const whiteboard = document.getElementById('whiteboard');
             if (data.type === 'url') {
                 whiteboard.innerHTML = `<iframe src="${data.content}" style="width:100%;height:100%;border:none;"></iframe>`;
+            } else if (data.type === 'markdown') {
+                whiteboard.innerHTML = '';
+                if (typeof marked === 'undefined') {
+                    whiteboard.innerHTML =
+                        '<div class="markdown-body wb-markdown-root"><p>(Markdown renderer unavailable)</p></div>';
+                    return;
+                }
+                whiteboard.appendChild(renderMarkdownToElement(data.content));
             } else {
-                const isFullHtmlPage = /<html[\s>]/i.test(data.content) ||
-                                      /<head[\s>]/i.test(data.content) ||
-                                      /<body[\s>]/i.test(data.content) ||
-                                      /<!DOCTYPE\s+html/i.test(data.content) ||
-                                      (/<script[\s>]/i.test(data.content) && /<\/script>/i.test(data.content)) ||
-                                      (/<style[\s>]/i.test(data.content) && /<\/style>/i.test(data.content));
+                const isFullHtmlPage = isFullHtmlDocument(data.content);
 
                 if (isFullHtmlPage) {
                     const blob = new Blob([data.content], { type: 'text/html' });
@@ -1040,16 +1361,12 @@
         }
 
         async function updateContent(type) {
-            let content;
-            if (type === 'url') {
-                content = document.getElementById('urlInput').value.trim();
+            if (type !== 'url') return;
+            let content = document.getElementById('urlInput').value.trim();
 
-                if (content && !content.match(/^https?:\/\//i)) {
-                    content = 'https://' + content;
-                    document.getElementById('urlInput').value = content;
-                }
-            } else {
-                content = document.getElementById('contentInput').value.trim();
+            if (content && !content.match(/^https?:\/\//i)) {
+                content = 'https://' + content;
+                document.getElementById('urlInput').value = content;
             }
 
             if (!content) {
@@ -1064,19 +1381,12 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        type: type,
-                        content: content
-                    })
+                        type: 'url',
+                        content: content,
+                    }),
                 });
 
-                if (response.ok) {
-                    if (type === 'html') {
-                        const htmlSection = document.getElementById('htmlSection');
-                        if (htmlSection.classList.contains('expanded')) {
-                            toggleHtmlSection();
-                        }
-                    }
-                } else {
+                if (!response.ok) {
                     alert(UI.updateFailed);
                 }
             } catch (error) {
@@ -1122,7 +1432,7 @@
             try {
                 const response = await fetch('/api/content');
                 const data = await response.json();
-                if (data.type === 'html') {
+                if (data.type === 'html' || data.type === 'markdown') {
                     document.getElementById('contentInput').value = data.content;
                 }
             } catch (error) {
@@ -1134,8 +1444,9 @@
             try {
                 const response = await fetch('/api/content');
                 const data = await response.json();
-                if (data.type === 'html') {
+                if (data.type === 'html' || data.type === 'markdown') {
                     document.getElementById('urlInput').value = '';
+                    document.getElementById('contentInput').value = data.content;
                 } else if (data.type === 'url') {
                     document.getElementById('urlInput').value = data.content;
                     document.getElementById('contentInput').value = '';
@@ -1143,6 +1454,7 @@
                 lastContent = data;
                 updateDisplay(data);
                 updatePdfMenuState();
+                updateSaveMenuState();
             } catch (error) {
                 console.error(error);
             }
@@ -1160,7 +1472,7 @@
             contentInput.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     e.preventDefault();
-                    updateContent('html');
+                    applyEditorContent();
                 }
                 if (e.key === 'Tab') {
                     e.preventDefault();
@@ -1184,6 +1496,66 @@
                 if (value && !value.match(/^https?:\/\//i)) {
                     e.target.value = 'https://' + value;
                 }
+            });
+
+            const mdFileInput = document.getElementById('mdFileInput');
+            if (mdFileInput) {
+                mdFileInput.addEventListener('change', function () {
+                    const f = mdFileInput.files && mdFileInput.files[0];
+                    if (!f) return;
+                    if (f.size > MAX_TEXT_FILE_BYTES) {
+                        alert(UI.fileTooLarge);
+                        mdFileInput.value = '';
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = function () {
+                        const text = reader.result;
+                        if (typeof text !== 'string') return;
+                        lastMarkdownBaseName =
+                            (f.name && f.name.replace(/\.[^.]+$/, '')) || 'whiteboard';
+                        document.getElementById('contentInput').value = text;
+                        mdFileInput.value = '';
+                    };
+                    reader.readAsText(f);
+                });
+            }
+
+            const wbDrop = document.getElementById('whiteboard');
+            wbDrop.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                wbDrop.classList.add('markdown-drag-over');
+            });
+            wbDrop.addEventListener('drop', function (e) {
+                e.preventDefault();
+                wbDrop.classList.remove('markdown-drag-over');
+                const f = e.dataTransfer.files && e.dataTransfer.files[0];
+                if (!f) return;
+                if (f.size > MAX_TEXT_FILE_BYTES) {
+                    alert(UI.fileTooLarge);
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function () {
+                    const text = reader.result;
+                    if (typeof text !== 'string') return;
+                    lastMarkdownBaseName =
+                        (f.name && f.name.replace(/\.[^.]+$/, '')) || 'whiteboard';
+                    document.getElementById('contentInput').value = text;
+                    const kind = detectContentKind(text);
+                    fetch('/api/content', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ type: kind, content: text }),
+                    })
+                        .then(function (r) {
+                            if (!r.ok) alert(UI.updateFailed);
+                        })
+                        .catch(function () {
+                            alert(UI.updateFailed);
+                        });
+                };
+                reader.readAsText(f);
             });
 
             document.addEventListener('keydown', function (e) {

@@ -7,6 +7,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
+from whiteboard_mcp import history_store
 from whiteboard_mcp import user_config
 from whiteboard_mcp.app import app
 
@@ -24,6 +25,7 @@ def test_get_content_default(client: TestClient) -> None:
     data = r.json()
     assert data["type"] == "html"
     assert "Welcome" in data["content"]
+    assert data["history_id"] == history_store.content_hash(data["type"], data["content"])
 
 
 def test_post_and_get_content_html(client: TestClient) -> None:
@@ -31,8 +33,19 @@ def test_post_and_get_content_html(client: TestClient) -> None:
     pr = client.post("/api/content", json=body)
     assert pr.status_code == 200
     gr = client.get("/api/content")
-    assert gr.json()["content"] == "<p>api test</p>"
-    assert gr.json()["type"] == "html"
+    payload = gr.json()
+    assert payload["content"] == "<p>api test</p>"
+    assert payload["type"] == "html"
+    assert payload["history_id"] == history_store.content_hash("html", "<p>api test</p>")
+
+
+def test_post_and_get_content_markdown(client: TestClient) -> None:
+    body = {"type": "markdown", "content": "# Title\n"}
+    pr = client.post("/api/content", json=body)
+    assert pr.status_code == 200
+    gr = client.get("/api/content")
+    assert gr.json()["content"] == "# Title\n"
+    assert gr.json()["type"] == "markdown"
 
 
 def test_post_content_invalid_type(client: TestClient) -> None:
@@ -51,6 +64,22 @@ def test_history_list_after_updates(client: TestClient) -> None:
     assert "html" in types and "url" in types
     url_rows = [x for x in rows if x["type"] == "url"]
     assert url_rows[0].get("url") == "https://hist.example/p"
+
+
+def test_history_restore_markdown(client: TestClient) -> None:
+    client.post("/api/content", json={"type": "markdown", "content": "# A"})
+    client.post("/api/content", json={"type": "markdown", "content": "# B"})
+    rows = client.get("/api/history").json()
+    md_rows = sorted(
+        [x for x in rows if x["type"] == "markdown"],
+        key=lambda x: x["updated_at"],
+    )
+    first_row, last_row = md_rows[0], md_rows[-1]
+    rr = client.post(f"/api/history/{first_row['id']}/restore")
+    assert rr.status_code == 200
+    cur = client.get("/api/content").json()
+    assert cur["content"] == "# A"
+    assert cur["type"] == "markdown"
 
 
 def test_history_restore_and_get_content(client: TestClient) -> None:
@@ -92,6 +121,23 @@ def test_history_raw_html_404_for_url_record(client: TestClient) -> None:
     client.post("/api/content", json={"type": "url", "content": "https://only.url/"})
     hid = client.get("/api/history").json()[0]["id"]
     r = client.get(f"/api/history/{hid}/html")
+    assert r.status_code == 404
+
+
+def test_history_raw_md_ok(client: TestClient) -> None:
+    md = "# raw md\n"
+    client.post("/api/content", json={"type": "markdown", "content": md})
+    hid = client.get("/api/history").json()[0]["id"]
+    r = client.get(f"/api/history/{hid}/md")
+    assert r.status_code == 200
+    assert "markdown" in r.headers.get("content-type", "")
+    assert r.text == md
+
+
+def test_history_raw_md_404_for_html_record(client: TestClient) -> None:
+    client.post("/api/content", json={"type": "html", "content": "<p>x</p>"})
+    hid = client.get("/api/history").json()[0]["id"]
+    r = client.get(f"/api/history/{hid}/md")
     assert r.status_code == 404
 
 
