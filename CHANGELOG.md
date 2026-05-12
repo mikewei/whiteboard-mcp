@@ -2,7 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.3]
+## [unreleased]
+
+### 🚀 Features
+
+- Add useful CLI params
+- File history and export as PDF
+- Support en|zh multi-language
+- Support delete history pages
+- Support Markdown display
+
+## [0.1.3] - 2026-05-09
+
+### Release
+
+- V0.1.3
 
 ### 🐛 Bug Fixes
 
