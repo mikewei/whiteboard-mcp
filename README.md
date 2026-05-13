@@ -2,6 +2,16 @@
 
 whiteboard-mcp is a simple whiteboard web application, providing a convenient way for displaying Chatbot/LLM's output.
 
+## Features
+
+- **Web whiteboard** — Browser UI to show content pushed by agents or other clients; good for demos and side-by-side LLM output.
+- **Any screen** — Open the board URL in a browser on any monitor, projector, or device on your network.
+- **Dual MCP transports** — **Streamable HTTP** at `/mcp` and **SSE** at `/sse` for clients that only support one style.
+- **REST API** — `GET`/`POST /api/content` for non-MCP integrations; history list/restore/delete under `/api/history`.
+- **History** — Server-side history of updates; reopen a past version from the history UI (and via the history API).
+- **Export** — Save the current view as **HTML** or **Markdown** from the menu; **Print / PDF** (browser print-to-PDF) when the board shows HTML or Markdown.
+- **Bilingual UI** — English and Chinese interface, file or in-app settings.
+
 ## Install
 
 ### From PYPI
@@ -23,23 +33,6 @@ uv run whiteboard_mcp
 
 The server listens on `0.0.0.0:5000` by default.
 
-## Web UI language
-
-The web UI supports **English** (`en`) and **Chinese** (`zh`).
-
-- **Config file:** `~/.whiteboard-mcp/config.yaml`
-- **Key:** `language`, value `en` or `zh`
-
-If `language` is **not** set in that file (or the file is missing), the UI language follows the browser **`Accept-Language`** header: **Chinese** (`zh`, `zh-CN`, etc.) maps to Chinese; anything else defaults to **English**.
-
-Example:
-
-```yaml
-language: zh
-```
-
-You can edit this file by hand, or use **More (⋯) → Settings** in the web UI, choose a language, and click **Save** (the server writes the same file and reloads the page).
-
 ## MCP endpoints
 
 | Transport       | URL (local)                                      |
@@ -49,11 +42,31 @@ You can edit this file by hand, or use **More (⋯) → Settings** in the web UI
 
 Use your machine's LAN IP instead of `127.0.0.1` when connecting from another device on the same network.
 
+## MCP tools
+
+The MCP server exposes these tools (names as registered with clients):
+
+| Tool | Purpose |
+|------|---------|
+| `update_whiteboard_url` | Set the board to load a URL (`url`). |
+| `update_whiteboard_html` | Render raw HTML (`html`). |
+| `update_whiteboard_markdown` | Render Markdown (`markdown`). |
+
 ## MCP configure
 
 ### Standard /mcp API
 
 Clients that support **Streamable HTTP** natively should point their MCP server URL at `http://127.0.0.1:5000/mcp` (adjust host/port for LAN as needed).
+
+#### **Hermes-Agent** [MCP config](https://hermes-agent.nousresearch.com/docs/user-guide/skills/bundled/mcp/mcp-native-mcp) example:
+
+Add an HTTP transport entry under `mcp_servers` in `~/.hermes/config.yaml`, then restart Hermes. Example:
+
+```yaml
+mcp_servers:
+  whiteboard:
+    url: "http://127.0.0.1:5000/mcp"
+```
 
 ### Compatible /sse API
 
