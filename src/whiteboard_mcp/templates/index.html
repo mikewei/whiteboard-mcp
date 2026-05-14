@@ -391,9 +391,60 @@
             margin: 0 auto;
             padding: 24px 28px 48px;
         }
+        /* github-markdown-css@5.6.1 light Primer tokens on the root; avoids OS dark prefers-color-scheme
+           fighting a light whiteboard (tables, pre, kbd, hr, blockquote, .pl-* in fenced HTML, etc.). */
         #whiteboard .wb-markdown-root.markdown-body {
-            background: #ffffff;
-            color: #24292f;
+            color-scheme: light;
+            --focus-outlineColor: #0969da;
+            --fgColor-default: #1f2328;
+            --fgColor-muted: #636c76;
+            --fgColor-accent: #0969da;
+            --fgColor-success: #1a7f37;
+            --fgColor-attention: #9a6700;
+            --fgColor-danger: #d1242f;
+            --fgColor-done: #8250df;
+            --bgColor-default: #ffffff;
+            --bgColor-muted: #f6f8fa;
+            --bgColor-neutral-muted: #afb8c133;
+            --bgColor-attention-muted: #fff8c5;
+            --borderColor-default: #d0d7de;
+            --borderColor-muted: #d0d7deb3;
+            --borderColor-neutral-muted: #afb8c133;
+            --borderColor-accent-emphasis: #0969da;
+            --borderColor-success-emphasis: #1a7f37;
+            --borderColor-attention-emphasis: #bf8700;
+            --borderColor-danger-emphasis: #cf222e;
+            --borderColor-done-emphasis: #8250df;
+            --color-prettylights-syntax-comment: #57606a;
+            --color-prettylights-syntax-constant: #0550ae;
+            --color-prettylights-syntax-constant-other-reference-link: #0a3069;
+            --color-prettylights-syntax-entity: #6639ba;
+            --color-prettylights-syntax-storage-modifier-import: #24292f;
+            --color-prettylights-syntax-entity-tag: #0550ae;
+            --color-prettylights-syntax-keyword: #cf222e;
+            --color-prettylights-syntax-string: #0a3069;
+            --color-prettylights-syntax-variable: #953800;
+            --color-prettylights-syntax-brackethighlighter-unmatched: #82071e;
+            --color-prettylights-syntax-brackethighlighter-angle: #57606a;
+            --color-prettylights-syntax-invalid-illegal-text: #f6f8fa;
+            --color-prettylights-syntax-invalid-illegal-bg: #82071e;
+            --color-prettylights-syntax-carriage-return-text: #f6f8fa;
+            --color-prettylights-syntax-carriage-return-bg: #cf222e;
+            --color-prettylights-syntax-string-regexp: #116329;
+            --color-prettylights-syntax-markup-list: #3b2300;
+            --color-prettylights-syntax-markup-heading: #0550ae;
+            --color-prettylights-syntax-markup-italic: #24292f;
+            --color-prettylights-syntax-markup-bold: #24292f;
+            --color-prettylights-syntax-markup-deleted-text: #82071e;
+            --color-prettylights-syntax-markup-deleted-bg: #ffebe9;
+            --color-prettylights-syntax-markup-inserted-text: #116329;
+            --color-prettylights-syntax-markup-inserted-bg: #dafbe1;
+            --color-prettylights-syntax-markup-changed-text: #953800;
+            --color-prettylights-syntax-markup-changed-bg: #ffd8b5;
+            --color-prettylights-syntax-markup-ignored-text: #eaeef2;
+            --color-prettylights-syntax-markup-ignored-bg: #0550ae;
+            --color-prettylights-syntax-meta-diff-range: #8250df;
+            --color-prettylights-syntax-sublimelinter-gutter-mark: #8c959f;
         }
         #whiteboard.markdown-drag-over {
             outline: 2px dashed #007bff;
@@ -516,25 +567,35 @@
             marked.use({
                 gfm: true,
                 renderer: {
-                    code(snippet) {
-                        const code = snippet.text || snippet.raw || '';
-                        const lang = (snippet.lang || '').trim();
+                    /* Marked v11 still calls block code as (code, infostring, escaped); token-object form is opt-in via useNewRenderer. */
+                    code(first, infostring, escaped) {
+                        let body;
+                        let lang = '';
+                        if (first && typeof first === 'object' && first.type === 'code') {
+                            body = first.text ?? '';
+                            lang = (first.lang || '').trim();
+                        } else {
+                            body = typeof first === 'string' ? first : '';
+                            const info = typeof infostring === 'string' ? infostring : '';
+                            lang = (info.match(/^\S*/)?.[0] || '').trim();
+                        }
+                        body = body.replace(/\n$/, '') + '\n';
                         let hl;
                         try {
                             if (typeof hljs !== 'undefined') {
                                 if (lang && hljs.getLanguage(lang)) {
-                                    hl = hljs.highlight(code, { language: lang }).value;
+                                    hl = hljs.highlight(body, { language: lang, ignoreIllegals: true }).value;
                                 } else {
-                                    hl = hljs.highlightAuto(code).value;
+                                    hl = hljs.highlightAuto(body, { ignoreIllegals: true }).value;
                                 }
                             } else {
                                 const d = document.createElement('div');
-                                d.textContent = code;
+                                d.textContent = body;
                                 hl = d.innerHTML;
                             }
                         } catch (e) {
                             const d = document.createElement('div');
-                            d.textContent = code;
+                            d.textContent = body;
                             hl = d.innerHTML;
                         }
                         const langEsc = lang ? escapeHtml(lang) : '';
@@ -623,6 +684,8 @@
             const katexCss = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css';
             const hlCss =
                 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css';
+            const ghMdLightVars =
+                'color-scheme:light;--focus-outlineColor:#0969da;--fgColor-default:#1f2328;--fgColor-muted:#636c76;--fgColor-accent:#0969da;--fgColor-success:#1a7f37;--fgColor-attention:#9a6700;--fgColor-danger:#d1242f;--fgColor-done:#8250df;--bgColor-default:#ffffff;--bgColor-muted:#f6f8fa;--bgColor-neutral-muted:#afb8c133;--bgColor-attention-muted:#fff8c5;--borderColor-default:#d0d7de;--borderColor-muted:#d0d7deb3;--borderColor-neutral-muted:#afb8c133;--borderColor-accent-emphasis:#0969da;--borderColor-success-emphasis:#1a7f37;--borderColor-attention-emphasis:#bf8700;--borderColor-danger-emphasis:#cf222e;--borderColor-done-emphasis:#8250df;--color-prettylights-syntax-comment:#57606a;--color-prettylights-syntax-constant:#0550ae;--color-prettylights-syntax-constant-other-reference-link:#0a3069;--color-prettylights-syntax-entity:#6639ba;--color-prettylights-syntax-storage-modifier-import:#24292f;--color-prettylights-syntax-entity-tag:#0550ae;--color-prettylights-syntax-keyword:#cf222e;--color-prettylights-syntax-string:#0a3069;--color-prettylights-syntax-variable:#953800;--color-prettylights-syntax-brackethighlighter-unmatched:#82071e;--color-prettylights-syntax-brackethighlighter-angle:#57606a;--color-prettylights-syntax-invalid-illegal-text:#f6f8fa;--color-prettylights-syntax-invalid-illegal-bg:#82071e;--color-prettylights-syntax-carriage-return-text:#f6f8fa;--color-prettylights-syntax-carriage-return-bg:#cf222e;--color-prettylights-syntax-string-regexp:#116329;--color-prettylights-syntax-markup-list:#3b2300;--color-prettylights-syntax-markup-heading:#0550ae;--color-prettylights-syntax-markup-italic:#24292f;--color-prettylights-syntax-markup-bold:#24292f;--color-prettylights-syntax-markup-deleted-text:#82071e;--color-prettylights-syntax-markup-deleted-bg:#ffebe9;--color-prettylights-syntax-markup-inserted-text:#116329;--color-prettylights-syntax-markup-inserted-bg:#dafbe1;--color-prettylights-syntax-markup-changed-text:#953800;--color-prettylights-syntax-markup-changed-bg:#ffd8b5;--color-prettylights-syntax-markup-ignored-text:#eaeef2;--color-prettylights-syntax-markup-ignored-bg:#0550ae;--color-prettylights-syntax-meta-diff-range:#8250df;--color-prettylights-syntax-sublimelinter-gutter-mark:#8c959f';
             return (
                 '<!DOCTYPE html>\n<html lang="en"><head>\n<meta charset="utf-8">\n' +
                 '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
@@ -635,7 +698,9 @@
                 '<link rel="stylesheet" href="' +
                 hlCss +
                 '" crossorigin="anonymous">\n' +
-                '<style>body{margin:0;background:#fff;} .markdown-body{box-sizing:border-box;min-height:100vh;max-width:980px;margin:0 auto;padding:24px 28px 48px;}</style>\n' +
+                '<style>body{margin:0;background:#fff;} .markdown-body{box-sizing:border-box;min-height:100vh;max-width:980px;margin:0 auto;padding:24px 28px 48px;' +
+                ghMdLightVars +
+                '}</style>\n' +
                 '</head><body>\n' +
                 innerHtml +
                 '\n</body></html>'
