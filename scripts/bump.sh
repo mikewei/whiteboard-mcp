@@ -53,6 +53,7 @@ git add pyproject.toml CHANGELOG.md uv.lock
 git commit -m "release: ${tag}"
 git tag -a "${tag}" -m "${tag}"
 git push origin
+git push origin --tags
 
 echo "Released ${tag}"
 
